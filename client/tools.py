@@ -38,7 +38,7 @@ async def peer_send(to: str, message: str, file: Optional[str] = None, lines: Op
     """
     client = get_client()
     if not client or not client.connected:
-        return "Nicht mit Bridge Server verbunden."
+        return "❌ Nicht mit Bridge Server verbunden."
 
     context = None
     if file or lines:
@@ -50,9 +50,10 @@ async def peer_send(to: str, message: str, file: Optional[str] = None, lines: Op
 
     success = await client.send_message(to, message, context)
     if success:
-        return f"Nachricht an '{to}' gesendet."
+        me = client.peer_name
+        return f"📤 [{me} → {to}]: {message}"
     else:
-        return "Fehler beim Senden der Nachricht."
+        return "❌ Fehler beim Senden der Nachricht."
 
 
 async def peer_read() -> str:
@@ -63,27 +64,31 @@ async def peer_read() -> str:
     """
     client = get_client()
     if not client or not client.connected:
-        return "Nicht mit Bridge Server verbunden."
+        return "❌ Nicht mit Bridge Server verbunden."
 
     messages = client.pop_messages()
     if not messages:
-        return "Keine neuen Nachrichten."
+        return "📭 Keine neuen Nachrichten."
 
-    lines = [f"{len(messages)} neue Nachricht(en):"]
+    me = client.peer_name
+    lines = []
     for msg in messages:
         sender = msg.get("from", "unbekannt")
         content = msg.get("content", "")
         context = msg.get("context")
-        timestamp = msg.get("timestamp", "")[:19].replace("T", " ")
 
-        lines.append(f"\n[{timestamp}] {sender}:")
-        lines.append(content)
+        # Hauptnachricht
+        lines.append(f"📥 [{sender} → {me}]: {content}")
 
+        # Kontext falls vorhanden
         if context:
+            ctx_parts = []
             if context.get("file"):
-                lines.append(f"  Kontext: {context['file']}")
+                ctx_parts.append(context['file'])
             if context.get("lines"):
-                lines.append(f"  Zeilen: {context['lines']}")
+                ctx_parts.append(f"Z.{context['lines']}")
+            if ctx_parts:
+                lines.append(f"   📎 {' '.join(ctx_parts)}")
 
     return "\n".join(lines)
 
