@@ -1,0 +1,15 @@
+// PolicyKit Regel für AI-Connect Services
+// Erlaubt User 'mp' die Steuerung von AI-Connect ohne sudo
+//
+// Installation:
+//   sudo cp /home/mp/Projekte/AI-Connect/polkit/50-ai-connect.rules /etc/polkit-1/rules.d/
+//   sudo chmod 644 /etc/polkit-1/rules.d/50-ai-connect.rules
+
+polkit.addRule(function(action, subject) {
+    if (action.id == "org.freedesktop.systemd1.manage-units" &&
+        subject.user == "mp" &&
+        (action.lookup("unit") == "ai-connect.service" ||
+         action.lookup("unit") == "ai-connect-mcp.service")) {
+        return polkit.Result.YES;
+    }
+});
