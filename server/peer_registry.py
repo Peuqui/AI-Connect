@@ -34,27 +34,6 @@ class PeerRegistry:
         """Registriert Callback für Peer-Austritt."""
         self._on_leave = callback
 
-    def _find_available_name(self, base_name: str, max_suffix: int = 10) -> str:
-        """Findet einen verfügbaren Namen.
-
-        Wenn base_name belegt ist, probiert base_name2, base_name3, etc.
-        """
-        # Observer-Namen ignorieren
-        if base_name.startswith("_") and base_name.endswith("_"):
-            return base_name
-
-        if base_name not in self._peers:
-            return base_name
-
-        for i in range(2, max_suffix + 1):
-            candidate = f"{base_name}{i}"
-            if candidate not in self._peers:
-                return candidate
-
-        # Fallback mit Timestamp
-        import time
-        return f"{base_name}_{int(time.time()) % 10000}"
-
     async def register(
         self,
         name: str,
@@ -64,14 +43,52 @@ class PeerRegistry:
     ) -> Peer:
         """Registriert einen neuen Peer.
 
-        Falls der Name bereits belegt ist, wird automatisch
-        ein Suffix angehängt (dev → dev2 → dev3 → ...).
+        Wenn bereits ein Peer mit gleichem Namen existiert:
+        - Von derselben IP: Alte Verbindung wird geschlossen, neue übernimmt
+        - Von anderer IP: Suffix wird angehängt (dev → dev2 → dev3 → ...)
 
         Returns:
             Der registrierte Peer (mit ggf. angepasstem Namen)
         """
-        # Verfügbaren Namen finden
-        actual_name = self._find_available_name(name)
+        # Observer-Namen direkt durchlassen
+        if name.startswith("_") and name.endswith("_"):
+            actual_name = name
+        elif name in self._peers:
+            existing = self._peers[name]
+            if existing.ip == ip:
+                # Gleiche IP: Alte Verbindung ersetzen
+                if existing.websocket:
+                    try:
+                        await existing.websocket.close()
+                    except Exception:
+                        pass
+                del self._peers[name]
+                actual_name = name
+            else:
+                # Andere IP: Neuen Namen mit Suffix finden
+                actual_name = name
+                for i in range(2, 11):
+                    candidate = f"{name}{i}"
+                    if candidate not in self._peers:
+                        actual_name = candidate
+                        break
+                    elif self._peers[candidate].ip == ip:
+                        # Gleiches Suffix von gleicher IP: Ersetzen
+                        old = self._peers[candidate]
+                        if old.websocket:
+                            try:
+                                await old.websocket.close()
+                            except Exception:
+                                pass
+                        del self._peers[candidate]
+                        actual_name = candidate
+                        break
+                else:
+                    # Fallback mit Timestamp
+                    import time
+                    actual_name = f"{name}_{int(time.time()) % 10000}"
+        else:
+            actual_name = name
 
         peer = Peer(
             name=actual_name,
