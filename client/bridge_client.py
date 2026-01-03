@@ -34,12 +34,15 @@ class BridgeClient:
         self._on_message: Optional[Callable] = None
         self._reconnect_task: Optional[asyncio.Task] = None
 
-    def _detect_project(self) -> Optional[str]:
-        """Erkennt das aktuelle Projekt basierend auf cwd."""
+    def _detect_project(self) -> str:
+        """Erkennt das aktuelle Projekt basierend auf cwd.
+
+        Gibt immer einen Namen zurück:
+        - Git-Repo: Repository-Name
+        - Sonst: Verzeichnisname
+        """
         cwd = Path.cwd()
-        if (cwd / ".git").exists():
-            return cwd.name
-        return None
+        return cwd.name
 
     @property
     def connected(self) -> bool:
