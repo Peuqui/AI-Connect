@@ -229,3 +229,69 @@ async def init_client(
     _client = BridgeClient(host=host, port=port, peer_name=peer_name)
     await _client.connect()
     return _client
+
+
+async def find_available_name(
+    host: str,
+    port: int,
+    base_name: str,
+    max_suffix: int = 10
+) -> str:
+    """Findet einen verfügbaren Peer-Namen.
+
+    Prüft ob base_name frei ist, sonst base_name2, base_name3, etc.
+
+    Args:
+        host: Bridge Server Host
+        port: Bridge Server Port
+        base_name: Gewünschter Basis-Name (z.B. "dev")
+        max_suffix: Maximale Suffix-Nummer (Standard: 10)
+
+    Returns:
+        Verfügbarer Name (z.B. "dev" oder "dev2")
+    """
+    import websockets
+
+    try:
+        uri = f"ws://{host}:{port}"
+        async with websockets.connect(uri) as ws:
+            # Temporär verbinden um Peer-Liste abzufragen
+            await ws.send(json.dumps({
+                "type": "register",
+                "name": "_probe_",
+                "observer": True
+            }))
+
+            # Peer-Liste anfordern
+            await ws.send(json.dumps({"type": "list_peers"}))
+
+            # Auf Antwort warten (mit Timeout)
+            try:
+                raw = await asyncio.wait_for(ws.recv(), timeout=2.0)
+                data = json.loads(raw)
+
+                if data.get("type") == "peer_list":
+                    peers = data.get("peers", [])
+                    taken_names = {p.get("name") for p in peers}
+
+                    # Prüfe base_name, dann base_name2, base_name3, ...
+                    if base_name not in taken_names:
+                        return base_name
+
+                    for i in range(2, max_suffix + 1):
+                        candidate = f"{base_name}{i}"
+                        if candidate not in taken_names:
+                            return candidate
+
+                    # Alle belegt - Fallback mit Timestamp
+                    import time
+                    return f"{base_name}_{int(time.time()) % 10000}"
+
+            except asyncio.TimeoutError:
+                pass
+
+    except Exception as e:
+        logger.warning(f"Konnte Peer-Namen nicht prüfen: {e}")
+
+    # Bei Fehler: Basis-Name verwenden
+    return base_name

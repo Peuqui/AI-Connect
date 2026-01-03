@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 import yaml
 from fastmcp import FastMCP
 
-from bridge_client import init_client, get_client
+from bridge_client import init_client, get_client, find_available_name
 import tools
 
 # Log-Verzeichnis erstellen
@@ -55,14 +55,19 @@ async def lifespan(app):
     bridge = config.get("bridge", {})
     peer = config.get("peer", {})
 
-    # Peer-Name aus Umgebung oder Config
-    peer_name = os.environ.get("AI_CONNECT_PEER_NAME", peer.get("name", "default"))
+    # Basis-Name aus Umgebung oder Config
+    base_name = os.environ.get("AI_CONNECT_PEER_NAME", peer.get("name", "default"))
+    host = bridge.get("host", "192.168.0.252")
+    port = bridge.get("port", 9999)
 
     if peer.get("auto_connect", True):
         try:
+            # Finde verfügbaren Namen (dev, dev2, dev3, ...)
+            peer_name = await find_available_name(host, port, base_name)
+
             client = await init_client(
-                host=bridge.get("host", "192.168.0.252"),
-                port=bridge.get("port", 9999),
+                host=host,
+                port=port,
                 peer_name=peer_name
             )
             logger.info(f"Mit Bridge verbunden als '{peer_name}'")
