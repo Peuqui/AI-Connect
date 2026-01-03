@@ -93,8 +93,23 @@ class PeerRegistry:
             await self._on_leave(peer)
 
     def get(self, name: str) -> Optional[Peer]:
-        """Holt einen Peer nach Name."""
-        return self._peers.get(name)
+        """Holt einen Peer nach Name.
+
+        Unterstützt:
+        - Exakte Matches: "mini (mp)" findet "mini (mp)"
+        - Partielle Matches: "mini" findet "mini (mp)" wenn eindeutig
+        """
+        # Erst exakten Match versuchen
+        if name in self._peers:
+            return self._peers[name]
+
+        # Dann partiellen Match: Name beginnt mit dem Suchbegriff
+        matches = [p for p in self._peers.values() if p.name.startswith(name + " (")]
+        if len(matches) == 1:
+            return matches[0]
+
+        # Kein oder mehrdeutiger Match
+        return None
 
     def get_all(self) -> list[dict]:
         """Gibt alle Peers als Liste zurück.
