@@ -117,7 +117,11 @@ class BridgeServer:
             logger.info(f"Verbindung geschlossen: {peer_name or client_ip}")
         finally:
             if peer_name:
-                await self.registry.unregister(peer_name)
+                # Nur entfernen wenn dieser WebSocket noch der aktive ist
+                # (verhindert Löschen nach Ersetzung durch neue Verbindung)
+                current_peer = self.registry.get(peer_name)
+                if current_peer and current_peer.websocket is websocket:
+                    await self.registry.unregister(peer_name)
 
     async def _route_message(self, message: dict, from_peer: str) -> None:
         """Routet eine Nachricht zum Ziel-Peer."""
