@@ -191,9 +191,29 @@ class BridgeServer:
                         pass
 
     async def _heartbeat_loop(self) -> None:
-        """Prüft regelmäßig auf inaktive Peers."""
+        """Prüft regelmäßig auf inaktive Peers und pingt sie an."""
         while True:
-            await asyncio.sleep(30)
+            await asyncio.sleep(10)
+
+            # Alle Peers anpingen um tote Verbindungen zu erkennen
+            dead_peers = []
+            for peer_info in self.registry.get_all():
+                peer = self.registry.get(peer_info["name"])
+                if peer and peer.websocket:
+                    try:
+                        await peer.websocket.send(json.dumps({"type": "ping"}))
+                        # Ping erfolgreich - Zeitstempel aktualisieren
+                        self.registry.update_ping(peer_info["name"])
+                    except Exception:
+                        # Verbindung tot - sofort entfernen
+                        dead_peers.append(peer_info["name"])
+                        logger.info(f"Verbindung tot: {peer_info['name']}")
+
+            # Tote Peers sofort entfernen
+            for name in dead_peers:
+                await self.registry.unregister(name)
+
+            # Zusätzlich: Peers ohne Heartbeat entfernen (Fallback)
             stale = await self.registry.cleanup_stale()
             for name in stale:
                 logger.info(f"Peer timeout: {name}")
