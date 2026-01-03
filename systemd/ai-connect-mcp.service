@@ -1,0 +1,16 @@
+[Unit]
+Description=AI-Connect MCP HTTP Server
+After=network.target ai-connect.service
+Wants=ai-connect.service
+
+[Service]
+Type=simple
+User=mp
+WorkingDirectory=/home/mp/Projekte/AI-Connect
+ExecStart=/home/mp/Projekte/AI-Connect/venv/bin/python -m client.http_server
+Restart=always
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

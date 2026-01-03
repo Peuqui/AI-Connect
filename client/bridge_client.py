@@ -7,7 +7,7 @@ from typing import Optional, Callable
 from pathlib import Path
 
 import websockets
-from websockets.client import WebSocketClientProtocol
+from websockets import ClientConnection
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +28,7 @@ class BridgeClient:
         self.peer_name = peer_name   # Kann vom Server überschrieben werden
         self.project = project or self._detect_project()
 
-        self._ws: Optional[WebSocketClientProtocol] = None
+        self._ws: Optional[ClientConnection] = None
         self._connected = False
         self._reconnecting = False
         self._should_reconnect = True  # Auto-Reconnect aktiviert
