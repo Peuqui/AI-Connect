@@ -158,9 +158,11 @@ async def peer_status() -> str:
         return "Client nicht initialisiert."
 
     if client.connected:
-        return f"Verbunden als '{client.peer_name}' mit Bridge Server {client.host}:{client.port}"
+        return f"✅ Verbunden als '{client.peer_name}' mit Bridge Server {client.host}:{client.port}"
+    elif client.reconnecting:
+        return f"🔄 Reconnect läuft... (Bridge Server: {client.host}:{client.port})"
     else:
-        return f"Nicht verbunden. Bridge Server: {client.host}:{client.port}"
+        return f"❌ Nicht verbunden. Bridge Server: {client.host}:{client.port}"
 
 
 def main() -> None:
