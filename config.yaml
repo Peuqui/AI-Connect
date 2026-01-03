@@ -1,0 +1,9 @@
+# AI-Connect Konfiguration
+
+bridge:
+  host: "192.168.0.252"
+  port: 9999
+
+peer:
+  name: "default"
+  auto_connect: true
