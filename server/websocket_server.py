@@ -59,10 +59,22 @@ class BridgeServer:
                     msg_type = message.get("type")
 
                     if msg_type == "register":
-                        peer_name = message.get("name")
+                        requested_name = message.get("name")
                         project = message.get("project")
-                        await self.registry.register(peer_name, client_ip, websocket, project)
-                        logger.info(f"Peer registriert: {peer_name} ({client_ip})")
+                        peer = await self.registry.register(requested_name, client_ip, websocket, project)
+                        peer_name = peer.name  # Kann von requested_name abweichen!
+
+                        # Zugewiesenen Namen an Client senden
+                        await websocket.send(json.dumps({
+                            "type": "registered",
+                            "name": peer_name,
+                            "requested": requested_name
+                        }))
+
+                        if peer_name != requested_name:
+                            logger.info(f"Peer registriert: {peer_name} (angefragt: {requested_name}) ({client_ip})")
+                        else:
+                            logger.info(f"Peer registriert: {peer_name} ({client_ip})")
 
                         # Ungelesene Nachrichten senden
                         unread = await self.store.get_unread(peer_name)

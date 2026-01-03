@@ -34,6 +34,27 @@ class PeerRegistry:
         """Registriert Callback für Peer-Austritt."""
         self._on_leave = callback
 
+    def _find_available_name(self, base_name: str, max_suffix: int = 10) -> str:
+        """Findet einen verfügbaren Namen.
+
+        Wenn base_name belegt ist, probiert base_name2, base_name3, etc.
+        """
+        # Observer-Namen ignorieren
+        if base_name.startswith("_") and base_name.endswith("_"):
+            return base_name
+
+        if base_name not in self._peers:
+            return base_name
+
+        for i in range(2, max_suffix + 1):
+            candidate = f"{base_name}{i}"
+            if candidate not in self._peers:
+                return candidate
+
+        # Fallback mit Timestamp
+        import time
+        return f"{base_name}_{int(time.time()) % 10000}"
+
     async def register(
         self,
         name: str,
@@ -41,15 +62,25 @@ class PeerRegistry:
         websocket: Any,
         project: Optional[str] = None
     ) -> Peer:
-        """Registriert einen neuen Peer."""
+        """Registriert einen neuen Peer.
+
+        Falls der Name bereits belegt ist, wird automatisch
+        ein Suffix angehängt (dev → dev2 → dev3 → ...).
+
+        Returns:
+            Der registrierte Peer (mit ggf. angepasstem Namen)
+        """
+        # Verfügbaren Namen finden
+        actual_name = self._find_available_name(name)
+
         peer = Peer(
-            name=name,
+            name=actual_name,
             ip=ip,
             connected_at=datetime.utcnow().isoformat() + "Z",
             project=project,
             websocket=websocket
         )
-        self._peers[name] = peer
+        self._peers[actual_name] = peer
 
         if self._on_join:
             await self._on_join(peer)
