@@ -55,14 +55,17 @@ class PeerRegistry:
             actual_name = name
         elif name in self._peers:
             existing = self._peers[name]
-            if existing.ip == ip:
-                # Gleiche IP: Alte Verbindung ersetzen
+            if existing.ip == ip and existing.project == project:
+                # Gleiche IP UND gleiches Projekt: Alte Verbindung ersetzen
+                # (z.B. VS Code startet mehrere MCP-Prozesse für dasselbe Fenster)
+                # Erst aus Registry entfernen, dann WebSocket schließen
+                # (verhindert Race Condition mit unregister)
+                del self._peers[name]
                 if existing.websocket:
                     try:
                         await existing.websocket.close()
                     except Exception:
                         pass
-                del self._peers[name]
                 actual_name = name
             else:
                 # Andere IP: Neuen Namen mit Suffix finden
@@ -72,15 +75,15 @@ class PeerRegistry:
                     if candidate not in self._peers:
                         actual_name = candidate
                         break
-                    elif self._peers[candidate].ip == ip:
-                        # Gleiches Suffix von gleicher IP: Ersetzen
+                    elif self._peers[candidate].ip == ip and self._peers[candidate].project == project:
+                        # Gleiches Suffix von gleicher IP UND Projekt: Ersetzen
                         old = self._peers[candidate]
+                        del self._peers[candidate]
                         if old.websocket:
                             try:
                                 await old.websocket.close()
                             except Exception:
                                 pass
-                        del self._peers[candidate]
                         actual_name = candidate
                         break
                 else:
