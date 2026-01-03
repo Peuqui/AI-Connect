@@ -21,8 +21,8 @@ async def peer_list() -> str:
 
     lines = ["Online Peers:"]
     for peer in peers:
-        project = f" ({peer['project']})" if peer.get('project') else ""
-        lines.append(f"  - {peer['name']}{project} [{peer['ip']}]")
+        # Name enthält bereits das Projekt: "Aragon (AIfred-Intelligence)"
+        lines.append(f"  - {peer['name']} [{peer['ip']}]")
 
     return "\n".join(lines)
 
