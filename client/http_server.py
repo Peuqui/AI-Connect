@@ -21,7 +21,6 @@ import yaml
 from fastmcp import FastMCP
 
 from bridge_client import BridgeClient, get_client
-import tools
 
 # Log-Verzeichnis erstellen
 log_dir = Path.home() / ".config" / "ai-connect"
