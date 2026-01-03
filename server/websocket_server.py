@@ -197,7 +197,7 @@ class BridgeServer:
     async def _heartbeat_loop(self) -> None:
         """Prüft regelmäßig auf inaktive Peers und pingt sie an."""
         while True:
-            await asyncio.sleep(10)
+            await asyncio.sleep(60)  # Alle 60 Sekunden statt 10
 
             # Alle Peers anpingen um tote Verbindungen zu erkennen
             dead_peers = []

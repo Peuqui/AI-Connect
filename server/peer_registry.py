@@ -20,7 +20,7 @@ class Peer:
 class PeerRegistry:
     """Verwaltet alle verbundenen Peers."""
 
-    def __init__(self, timeout_seconds: int = 20):
+    def __init__(self, timeout_seconds: int = 300):  # 5 Minuten Timeout
         self._peers: dict[str, Peer] = {}
         self._timeout = timeout_seconds
         self._on_join: Optional[Callable] = None

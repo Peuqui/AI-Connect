@@ -73,7 +73,9 @@ class BridgeClient:
         """Verbindet zum Bridge Server."""
         try:
             uri = f"ws://{self.host}:{self.port}"
-            self._ws = await websockets.connect(uri, ping_interval=20, ping_timeout=10)
+            # Längere Timeouts für stabilere Verbindungen
+            # Ping alle 60s, Timeout nach 300s (5 Minuten)
+            self._ws = await websockets.connect(uri, ping_interval=60, ping_timeout=300)
             self._connected = True
             self._reconnecting = False
 
