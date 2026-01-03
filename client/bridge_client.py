@@ -29,10 +29,14 @@ class BridgeClient:
 
         self._ws: Optional[WebSocketClientProtocol] = None
         self._connected = False
+        self._reconnecting = False
+        self._should_reconnect = True  # Auto-Reconnect aktiviert
         self._message_queue: list[dict] = []
         self._peers: list[dict] = []
         self._on_message: Optional[Callable] = None
         self._reconnect_task: Optional[asyncio.Task] = None
+        self._receive_task: Optional[asyncio.Task] = None
+        self._ping_task: Optional[asyncio.Task] = None
 
     def _detect_project(self) -> str:
         """Erkennt das aktuelle Projekt basierend auf cwd.
@@ -47,6 +51,10 @@ class BridgeClient:
     @property
     def connected(self) -> bool:
         return self._connected
+
+    @property
+    def reconnecting(self) -> bool:
+        return self._reconnecting
 
     @property
     def peers(self) -> list[dict]:
@@ -64,8 +72,9 @@ class BridgeClient:
         """Verbindet zum Bridge Server."""
         try:
             uri = f"ws://{self.host}:{self.port}"
-            self._ws = await websockets.connect(uri)
+            self._ws = await websockets.connect(uri, ping_interval=20, ping_timeout=10)
             self._connected = True
+            self._reconnecting = False
 
             # Registrieren
             await self._send({
@@ -74,10 +83,16 @@ class BridgeClient:
                 "project": self.project
             })
 
+            # Alte Tasks canceln falls vorhanden
+            if self._receive_task and not self._receive_task.done():
+                self._receive_task.cancel()
+            if self._ping_task and not self._ping_task.done():
+                self._ping_task.cancel()
+
             # Empfangs-Loop starten
-            asyncio.create_task(self._receive_loop())
+            self._receive_task = asyncio.create_task(self._receive_loop())
             # Ping-Loop starten
-            asyncio.create_task(self._ping_loop())
+            self._ping_task = asyncio.create_task(self._ping_loop())
 
             logger.info(f"Verbunden mit Bridge: {uri}")
             return True
@@ -90,6 +105,16 @@ class BridgeClient:
     async def disconnect(self) -> None:
         """Trennt die Verbindung."""
         self._connected = False
+        self._should_reconnect = False  # Auto-Reconnect deaktivieren
+
+        # Tasks stoppen
+        if self._reconnect_task and not self._reconnect_task.done():
+            self._reconnect_task.cancel()
+        if self._receive_task and not self._receive_task.done():
+            self._receive_task.cancel()
+        if self._ping_task and not self._ping_task.done():
+            self._ping_task.cancel()
+
         if self._ws:
             await self._ws.close()
             self._ws = None
@@ -146,10 +171,20 @@ class BridgeClient:
     async def _send(self, data: dict) -> bool:
         """Sendet JSON-Daten über WebSocket."""
         if not self._ws:
+            # Verbindung verloren - Reconnect triggern
+            if self._should_reconnect and not self._reconnecting:
+                asyncio.create_task(self._reconnect())
             return False
         try:
             await self._ws.send(json.dumps(data))
             return True
+        except websockets.exceptions.ConnectionClosed:
+            logger.warning("Verbindung beim Senden verloren")
+            self._connected = False
+            self._ws = None
+            if self._should_reconnect and not self._reconnecting:
+                asyncio.create_task(self._reconnect())
+            return False
         except Exception as e:
             logger.error(f"Senden fehlgeschlagen: {e}")
             return False
@@ -200,7 +235,9 @@ class BridgeClient:
         except websockets.exceptions.ConnectionClosed:
             logger.warning("Verbindung zum Bridge Server verloren")
             self._connected = False
-            asyncio.create_task(self._reconnect())
+            self._ws = None
+            if self._should_reconnect and not self._reconnecting:
+                asyncio.create_task(self._reconnect())
 
     async def _ping_loop(self) -> None:
         """Sendet regelmäßig Pings."""
@@ -210,14 +247,34 @@ class BridgeClient:
                 await self._send({"type": "ping"})
 
     async def _reconnect(self) -> None:
-        """Versucht Wiederverbindung."""
-        delay = 5
-        while not self._connected:
-            logger.info(f"Wiederverbindung in {delay}s...")
+        """Versucht Wiederverbindung mit exponential backoff."""
+        if self._reconnecting:
+            return  # Bereits ein Reconnect aktiv
+
+        self._reconnecting = True
+        delay = 2  # Start mit 2 Sekunden
+        max_delay = 30  # Maximal 30 Sekunden warten
+        attempt = 0
+
+        while not self._connected and self._should_reconnect:
+            attempt += 1
+            logger.info(f"Reconnect Versuch {attempt} in {delay}s...")
             await asyncio.sleep(delay)
-            if await self.connect():
+
+            if not self._should_reconnect:
                 break
-            delay = min(delay * 2, 60)
+
+            try:
+                if await self.connect():
+                    logger.info(f"Reconnect erfolgreich nach {attempt} Versuchen")
+                    break
+            except Exception as e:
+                logger.error(f"Reconnect fehlgeschlagen: {e}")
+
+            # Exponential backoff
+            delay = min(delay * 1.5, max_delay)
+
+        self._reconnecting = False
 
 
 # Globale Instanz für MCP Tools
