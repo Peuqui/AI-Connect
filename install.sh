@@ -401,8 +401,7 @@ EOF
 echo -e "  ${GREEN}ai-connect-mcp.service installiert${NC}"
 
 # 5. PolicyKit Regel installieren
-STEP=$((STEP + 1))
-echo -e "${YELLOW}[$STEP/$TOTAL_STEPS]${NC} PolicyKit Regel..."
+echo -e "${YELLOW}[5/$TOTAL_STEPS]${NC} PolicyKit Regel..."
 
 if [[ "$SERVER_MODE" == "server" ]]; then
     sudo tee /etc/polkit-1/rules.d/50-ai-connect.rules > /dev/null << 'EOF'
@@ -437,9 +436,12 @@ sudo chmod 644 /etc/polkit-1/rules.d/50-ai-connect.rules
 sudo systemctl restart polkit.service
 echo -e "  ${GREEN}PolicyKit Regel installiert${NC}"
 
-# 6. Services aktivieren und (neu)starten
-STEP=$((STEP + 1))
-echo -e "${YELLOW}[$STEP/$TOTAL_STEPS]${NC} Services aktivieren und starten..."
+# 6. Services aktivieren und (neu)starten (nur bei Server-Modus Schritt 6)
+if [[ "$SERVER_MODE" == "server" ]]; then
+    echo -e "${YELLOW}[6/$TOTAL_STEPS]${NC} Services aktivieren und starten..."
+else
+    echo -e "${YELLOW}[5/$TOTAL_STEPS]${NC} Services aktivieren und starten..."
+fi
 sudo systemctl daemon-reload
 
 if [[ "$SERVER_MODE" == "server" ]]; then
