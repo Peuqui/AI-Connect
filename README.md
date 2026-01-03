@@ -42,8 +42,8 @@ source venv/bin/activate
 pip install fastmcp websockets aiosqlite pyyaml
 
 # 3. Config für Mini-PC erstellen
-mkdir -p ~/.ai-connect
-cat > ~/.ai-connect/config.yaml << 'EOF'
+mkdir -p ~/.config/ai-connect
+cat > ~/.config/ai-connect/config.yaml << 'EOF'
 bridge:
   host: "0.0.0.0"
   port: 9999
@@ -114,7 +114,7 @@ EOF
 
 ## Quick Setup: Hauptrechner (WSL) - bereits erledigt
 
-Config liegt in `~/.ai-connect/config.yaml`:
+Config liegt in `~/.config/ai-connect/config.yaml`:
 ```yaml
 bridge:
   host: "192.168.0.252"
@@ -201,5 +201,5 @@ claude mcp list
 
 **Logs:**
 ```bash
-tail -f ~/.ai-connect/mcp.log
+tail -f ~/.config/ai-connect/mcp.log
 ```

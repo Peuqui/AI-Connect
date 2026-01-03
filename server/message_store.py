@@ -11,7 +11,7 @@ from typing import Optional
 class MessageStore:
     """Speichert Nachrichten in SQLite für Historie und Offline-Zustellung."""
 
-    def __init__(self, db_path: str = "~/.ai-connect/messages.db"):
+    def __init__(self, db_path: str = "~/.config/ai-connect/messages.db"):
         self.db_path = Path(db_path).expanduser()
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._db: Optional[aiosqlite.Connection] = None

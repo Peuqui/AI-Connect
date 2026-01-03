@@ -22,7 +22,7 @@ def load_config() -> dict:
     config_paths = [
         Path("config.yaml"),
         Path(__file__).parent.parent / "config.yaml",
-        Path.home() / ".ai-connect" / "config.yaml"
+        Path.home() / ".config" / "ai-connect" / "config.yaml"
     ]
 
     for path in config_paths:
