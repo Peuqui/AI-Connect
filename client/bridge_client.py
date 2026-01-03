@@ -24,7 +24,8 @@ class BridgeClient:
     ):
         self.host = host
         self.port = port
-        self.peer_name = peer_name
+        self._base_name = peer_name  # Original-Name für Registrierung
+        self.peer_name = peer_name   # Kann vom Server überschrieben werden
         self.project = project or self._detect_project()
 
         self._ws: Optional[WebSocketClientProtocol] = None
@@ -76,10 +77,10 @@ class BridgeClient:
             self._connected = True
             self._reconnecting = False
 
-            # Registrieren
+            # Registrieren - immer den Original-Namen senden, nicht den zugewiesenen
             await self._send({
                 "type": "register",
-                "name": self.peer_name,
+                "name": self._base_name,
                 "project": self.project
             })
 
