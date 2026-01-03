@@ -1,13 +1,14 @@
 #!/bin/bash
 #
-# AI-Connect Installation Script (Server-Modus)
-# Installiert Bridge Server, MCP HTTP Server und PolicyKit-Regeln
+# AI-Connect Client Installation Script
+# Installiert nur den MCP HTTP Server (NICHT den Bridge Server)
+# Für Rechner die sich zum zentralen Bridge Server verbinden
 #
 # Verwendung:
-#   ./install.sh            # Vollinstallation (fragt nach Config)
-#   ./install.sh --update   # Nur Services aktualisieren (Config bleibt)
-#   ./install.sh --status   # Zeigt nur Status an
-#   ./install.sh --uninstall # Deinstallation
+#   ./install-client.sh            # Vollinstallation
+#   ./install-client.sh --update   # Nur Services aktualisieren
+#   ./install-client.sh --status   # Zeigt nur Status an
+#   ./install-client.sh --uninstall # Deinstallation
 #
 
 set -e
@@ -39,16 +40,16 @@ for arg in "$@"; do
             UNINSTALL=true
             ;;
         --help|-h)
-            echo "AI-Connect Install Script (Server-Modus)"
+            echo "AI-Connect Client Install Script"
             echo ""
-            echo "Installiert Bridge Server + MCP HTTP Server."
-            echo "Für Client-Only Installation: ./install-client.sh"
+            echo "Installiert nur den MCP HTTP Server (Client-Modus)."
+            echo "Der Bridge Server muss auf einem anderen Rechner laufen."
             echo ""
             echo "Verwendung:"
-            echo "  ./install.sh            # Vollinstallation"
-            echo "  ./install.sh --update   # Nur Services aktualisieren"
-            echo "  ./install.sh --status   # Status anzeigen"
-            echo "  ./install.sh --uninstall # Deinstallation"
+            echo "  ./install-client.sh            # Vollinstallation"
+            echo "  ./install-client.sh --update   # Nur Services aktualisieren"
+            echo "  ./install-client.sh --status   # Status anzeigen"
+            echo "  ./install-client.sh --uninstall # Deinstallation"
             echo ""
             exit 0
             ;;
@@ -58,7 +59,7 @@ done
 # Uninstall-Funktion
 do_uninstall() {
     echo "=========================================="
-    echo "  AI-Connect Server Deinstallation"
+    echo "  AI-Connect Client Deinstallation"
     echo "=========================================="
     echo ""
 
@@ -69,27 +70,29 @@ do_uninstall() {
     fi
     echo ""
 
-    # 1. Services stoppen und deaktivieren
-    echo -e "${YELLOW}[1/4]${NC} Services stoppen..."
-    for SERVICE in ai-connect-mcp.service ai-connect.service; do
-        if systemctl is-active --quiet $SERVICE 2>/dev/null; then
-            sudo systemctl stop $SERVICE
-            echo -e "  ${GREEN}$SERVICE gestoppt${NC}"
-        fi
-        if systemctl is-enabled --quiet $SERVICE 2>/dev/null; then
-            sudo systemctl disable $SERVICE 2>/dev/null
-        fi
-    done
+    # 1. Service stoppen und deaktivieren
+    echo -e "${YELLOW}[1/4]${NC} Service stoppen..."
+    if systemctl is-active --quiet ai-connect-mcp.service 2>/dev/null; then
+        sudo systemctl stop ai-connect-mcp.service
+        echo -e "  ${GREEN}Service gestoppt${NC}"
+    else
+        echo "  Service läuft nicht"
+    fi
 
-    # 2. Systemd Service-Dateien entfernen
-    echo -e "${YELLOW}[2/4]${NC} Service-Dateien entfernen..."
-    for SERVICE in ai-connect.service ai-connect-mcp.service; do
-        if [[ -f "/etc/systemd/system/$SERVICE" ]]; then
-            sudo rm "/etc/systemd/system/$SERVICE"
-            echo -e "  ${GREEN}$SERVICE entfernt${NC}"
-        fi
-    done
-    sudo systemctl daemon-reload
+    if systemctl is-enabled --quiet ai-connect-mcp.service 2>/dev/null; then
+        sudo systemctl disable ai-connect-mcp.service 2>/dev/null
+        echo -e "  ${GREEN}Service deaktiviert${NC}"
+    fi
+
+    # 2. Systemd Service-Datei entfernen
+    echo -e "${YELLOW}[2/4]${NC} Service-Datei entfernen..."
+    if [[ -f "/etc/systemd/system/ai-connect-mcp.service" ]]; then
+        sudo rm /etc/systemd/system/ai-connect-mcp.service
+        sudo systemctl daemon-reload
+        echo -e "  ${GREEN}Service-Datei entfernt${NC}"
+    else
+        echo "  Service-Datei existiert nicht"
+    fi
 
     # 3. PolicyKit Regel entfernen
     echo -e "${YELLOW}[3/4]${NC} PolicyKit Regel entfernen..."
@@ -132,16 +135,10 @@ fi
 # Status-Funktion
 show_status() {
     echo ""
-    echo -e "${BLUE}=== AI-Connect Status ===${NC}"
+    echo -e "${BLUE}=== AI-Connect Client Status ===${NC}"
     echo ""
 
-    # Services
-    if systemctl is-active --quiet ai-connect.service 2>/dev/null; then
-        echo -e "  ai-connect.service:     ${GREEN}● läuft${NC}"
-    else
-        echo -e "  ai-connect.service:     ${RED}○ gestoppt${NC}"
-    fi
-
+    # MCP Service
     if systemctl is-active --quiet ai-connect-mcp.service 2>/dev/null; then
         echo -e "  ai-connect-mcp.service: ${GREEN}● läuft${NC}"
     else
@@ -153,7 +150,9 @@ show_status() {
     if [[ -f "$CONFIG_DIR/config.yaml" ]]; then
         echo -e "  Config: ${GREEN}$CONFIG_DIR/config.yaml${NC}"
         PEER_NAME=$(grep -E "^\s+name:" "$CONFIG_DIR/config.yaml" | head -1 | sed 's/.*: *"\?\([^"]*\)"\?/\1/')
+        BRIDGE_HOST=$(grep -E "^\s+host:" "$CONFIG_DIR/config.yaml" | head -1 | sed 's/.*: *"\?\([^"]*\)"\?/\1/')
         echo -e "  Peer-Name: ${YELLOW}$PEER_NAME${NC}"
+        echo -e "  Bridge Server: ${YELLOW}$BRIDGE_HOST${NC}"
     else
         echo -e "  Config: ${RED}nicht vorhanden${NC}"
     fi
@@ -164,14 +163,6 @@ show_status() {
         echo -e "  PolicyKit: ${GREEN}installiert${NC}"
     else
         echo -e "  PolicyKit: ${RED}nicht installiert${NC}"
-    fi
-
-    # Systemd
-    echo ""
-    if [[ -f "/etc/systemd/system/ai-connect.service" ]]; then
-        echo -e "  Systemd Services: ${GREEN}installiert${NC}"
-    else
-        echo -e "  Systemd Services: ${RED}nicht installiert${NC}"
     fi
 
     echo ""
@@ -185,21 +176,24 @@ fi
 
 echo "=========================================="
 if $UPDATE_ONLY; then
-    echo "  AI-Connect Update"
+    echo "  AI-Connect Client Update"
 else
-    echo "  AI-Connect Installation"
+    echo "  AI-Connect Client Installation"
 fi
 echo "=========================================="
 echo ""
+echo -e "${YELLOW}Hinweis:${NC} Dies installiert nur den MCP Client."
+echo "         Der Bridge Server muss separat laufen."
+echo ""
 
 # Prüfe ob wir im richtigen Verzeichnis sind
-if [[ ! -f "$SCRIPT_DIR/server/websocket_server.py" ]]; then
+if [[ ! -f "$SCRIPT_DIR/client/http_server.py" ]]; then
     echo -e "${RED}Fehler: Script muss aus dem AI-Connect Projektverzeichnis ausgeführt werden${NC}"
     exit 1
 fi
 
 # 1. Python venv erstellen/aktualisieren
-echo -e "${YELLOW}[1/6]${NC} Python Virtual Environment..."
+echo -e "${YELLOW}[1/5]${NC} Python Virtual Environment..."
 if [[ ! -d "$SCRIPT_DIR/venv" ]]; then
     echo "  Erstelle venv..."
     python3 -m venv "$SCRIPT_DIR/venv"
@@ -208,13 +202,13 @@ else
 fi
 
 # 2. Dependencies installieren/aktualisieren
-echo -e "${YELLOW}[2/6]${NC} Python Dependencies..."
+echo -e "${YELLOW}[2/5]${NC} Python Dependencies..."
 "$SCRIPT_DIR/venv/bin/pip" install -q --upgrade pip
 "$SCRIPT_DIR/venv/bin/pip" install -q --upgrade websockets pyyaml fastmcp
 echo -e "  ${GREEN}Dependencies aktualisiert${NC}"
 
 # 3. Config-Verzeichnis erstellen
-echo -e "${YELLOW}[3/6]${NC} Konfiguration..."
+echo -e "${YELLOW}[3/5]${NC} Konfiguration..."
 mkdir -p "$CONFIG_DIR"
 
 if [[ -f "$CONFIG_DIR/config.yaml" ]]; then
@@ -222,7 +216,6 @@ if [[ -f "$CONFIG_DIR/config.yaml" ]]; then
     if ! $UPDATE_ONLY; then
         read -p "  Config neu erstellen? [j/N]: " RECREATE_CONFIG
         if [[ "$RECREATE_CONFIG" =~ ^[jJyY]$ ]]; then
-            # Backup erstellen
             cp "$CONFIG_DIR/config.yaml" "$CONFIG_DIR/config.yaml.bak"
             echo "  Backup erstellt: config.yaml.bak"
             rm "$CONFIG_DIR/config.yaml"
@@ -255,41 +248,21 @@ EOF
     echo -e "  ${GREEN}Config erstellt: $CONFIG_DIR/config.yaml${NC}"
 fi
 
-# 4. Systemd Services installieren (braucht sudo)
-echo -e "${YELLOW}[4/6]${NC} Systemd Services..."
+# 4. Systemd Service installieren (nur MCP, kein Bridge)
+echo -e "${YELLOW}[4/5]${NC} Systemd Service..."
 
-# Prüfe ob Services schon existieren
-SERVICES_EXIST=false
-if [[ -f "/etc/systemd/system/ai-connect.service" ]]; then
-    SERVICES_EXIST=true
+SERVICE_EXISTS=false
+if [[ -f "/etc/systemd/system/ai-connect-mcp.service" ]]; then
+    SERVICE_EXISTS=true
 fi
 
 echo "  (benötigt sudo-Rechte)"
-
-# Bridge Server Service
-sudo tee /etc/systemd/system/ai-connect.service > /dev/null << EOF
-[Unit]
-Description=AI-Connect Bridge Server
-After=network.target
-
-[Service]
-Type=simple
-User=$USER
-WorkingDirectory=$SCRIPT_DIR
-ExecStart=$SCRIPT_DIR/venv/bin/python -m server.websocket_server
-Restart=always
-RestartSec=5
-Environment=PYTHONUNBUFFERED=1
-
-[Install]
-WantedBy=multi-user.target
-EOF
 
 # MCP HTTP Server Service
 sudo tee /etc/systemd/system/ai-connect-mcp.service > /dev/null << EOF
 [Unit]
 Description=AI-Connect MCP HTTP Server
-After=network.target ai-connect.service
+After=network.target
 
 [Service]
 Type=simple
@@ -304,14 +277,14 @@ Environment=PYTHONUNBUFFERED=1
 WantedBy=multi-user.target
 EOF
 
-if $SERVICES_EXIST; then
-    echo -e "  ${GREEN}Services aktualisiert${NC}"
+if $SERVICE_EXISTS; then
+    echo -e "  ${GREEN}Service aktualisiert${NC}"
 else
-    echo -e "  ${GREEN}Services installiert${NC}"
+    echo -e "  ${GREEN}Service installiert${NC}"
 fi
 
 # 5. PolicyKit Regel installieren
-echo -e "${YELLOW}[5/6]${NC} PolicyKit Regel..."
+echo -e "${YELLOW}[5/5]${NC} PolicyKit Regel..."
 
 POLKIT_EXISTS=false
 if [[ -f "/etc/polkit-1/rules.d/50-ai-connect.rules" ]]; then
@@ -319,14 +292,13 @@ if [[ -f "/etc/polkit-1/rules.d/50-ai-connect.rules" ]]; then
 fi
 
 sudo tee /etc/polkit-1/rules.d/50-ai-connect.rules > /dev/null << 'EOF'
-// PolicyKit Regel für AI-Connect Services
-// Erlaubt User 'mp' die Steuerung von AI-Connect ohne sudo
+// PolicyKit Regel für AI-Connect MCP Service
+// Erlaubt User 'mp' die Steuerung ohne sudo
 
 polkit.addRule(function(action, subject) {
     if (action.id == "org.freedesktop.systemd1.manage-units" &&
         subject.user == "mp" &&
-        (action.lookup("unit") == "ai-connect.service" ||
-         action.lookup("unit") == "ai-connect-mcp.service")) {
+        action.lookup("unit") == "ai-connect-mcp.service") {
         return polkit.Result.YES;
     }
 });
@@ -338,44 +310,39 @@ sudo chmod 644 /etc/polkit-1/rules.d/50-ai-connect.rules
 sudo systemctl restart polkit.service
 
 if $POLKIT_EXISTS; then
-    echo -e "  ${GREEN}PolicyKit Regel aktualisiert und Dienst neu geladen${NC}"
+    echo -e "  ${GREEN}PolicyKit Regel aktualisiert${NC}"
 else
-    echo -e "  ${GREEN}PolicyKit Regel installiert und Dienst neu geladen${NC}"
+    echo -e "  ${GREEN}PolicyKit Regel installiert${NC}"
 fi
 
-# 6. Services aktivieren und (neu)starten
-echo -e "${YELLOW}[6/6]${NC} Services aktivieren und starten..."
+# Service aktivieren und (neu)starten
+echo ""
+echo "Service aktivieren und starten..."
 sudo systemctl daemon-reload
-sudo systemctl enable ai-connect.service ai-connect-mcp.service 2>/dev/null
+sudo systemctl enable ai-connect-mcp.service 2>/dev/null
 
-if $UPDATE_ONLY || $SERVICES_EXIST; then
-    echo "  Services werden neugestartet..."
-    sudo systemctl restart ai-connect.service
-    sleep 2
+if $UPDATE_ONLY || $SERVICE_EXISTS; then
     sudo systemctl restart ai-connect-mcp.service
 else
-    sudo systemctl start ai-connect.service
-    sleep 2
     sudo systemctl start ai-connect-mcp.service
 fi
 
 echo ""
 echo "=========================================="
 if $UPDATE_ONLY; then
-    echo -e "  ${GREEN}Update abgeschlossen!${NC}"
+    echo -e "  ${GREEN}Client Update abgeschlossen!${NC}"
 else
-    echo -e "  ${GREEN}Installation abgeschlossen!${NC}"
+    echo -e "  ${GREEN}Client Installation abgeschlossen!${NC}"
 fi
 echo "=========================================="
 
 show_status
 
 echo "Befehle:"
-echo "  ./install.sh --status  # Status anzeigen"
-echo "  ./install.sh --update  # Update durchführen"
+echo "  ./install-client.sh --status  # Status anzeigen"
+echo "  ./install-client.sh --update  # Update durchführen"
 echo ""
 echo "Logs:"
-echo "  journalctl -u ai-connect.service -f"
 echo "  journalctl -u ai-connect-mcp.service -f"
 echo ""
 echo "VS Code MCP Konfiguration (~/.config/Code/User/settings.json):"
