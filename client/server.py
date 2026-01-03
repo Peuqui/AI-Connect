@@ -55,8 +55,10 @@ async def lifespan(app):
     bridge = config.get("bridge", {})
     peer = config.get("peer", {})
 
-    # Basis-Name aus Umgebung oder Config
+    # Basis-Name aus Umgebung oder Config + PID für Eindeutigkeit
     base_name = os.environ.get("AI_CONNECT_PEER_NAME", peer.get("name", "default"))
+    # Füge PID hinzu um mehrere Instanzen zu unterscheiden
+    unique_name = f"{base_name}#{os.getpid()}"
     host = bridge.get("host", "192.168.0.252")
     port = bridge.get("port", 9999)
 
@@ -66,7 +68,7 @@ async def lifespan(app):
             client = await init_client(
                 host=host,
                 port=port,
-                peer_name=base_name
+                peer_name=unique_name
             )
             # Tatsächlicher Name kann abweichen (vom Server zugewiesen)
             logger.info(f"Mit Bridge verbunden als '{client.peer_name}'")
