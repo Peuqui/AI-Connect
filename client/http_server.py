@@ -10,6 +10,7 @@ import os
 import signal
 import sys
 from contextlib import asynccontextmanager
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -145,7 +146,8 @@ async def peer_send(to: str, message: str, file: Optional[str] = None, lines: Op
 
     success = await client.send_message(to, message, context)
     if success:
-        return f"[{client.peer_name} -> {to}]: {message}"
+        timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]  # HH:MM:SS.mmm
+        return f"📤 [{timestamp}] [{client.peer_name} → {to}]: {message}"
     else:
         return "Fehler beim Senden der Nachricht."
 
@@ -172,7 +174,19 @@ async def peer_read() -> str:
         content = msg.get("content", "")
         context = msg.get("context")
 
-        result_lines.append(f"[{sender} -> {me}]: {content}")
+        # Zeitstempel vom Server oder aktuell
+        ts = msg.get("timestamp", "")
+        if ts:
+            # ISO-Format: 2024-01-03T14:30:45.123Z -> 14:30:45.123
+            try:
+                dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+                timestamp = dt.strftime("%H:%M:%S.%f")[:-3]
+            except:
+                timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+        else:
+            timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+
+        result_lines.append(f"📥 [{timestamp}] [{sender} → {me}]: {content}")
 
         if context:
             ctx_parts = []
@@ -181,7 +195,7 @@ async def peer_read() -> str:
             if context.get("lines"):
                 ctx_parts.append(f"Z.{context['lines']}")
             if ctx_parts:
-                result_lines.append(f"   Kontext: {' '.join(ctx_parts)}")
+                result_lines.append(f"   📎 Kontext: {' '.join(ctx_parts)}")
 
     return "\n".join(result_lines)
 
@@ -207,8 +221,20 @@ async def peer_history(peer: str, limit: int = 20) -> str:
     for msg in messages[-limit:]:
         sender = msg.get("from", "?")
         content = msg.get("content", "")
-        timestamp = msg.get("timestamp", "")[:19].replace("T", " ")
-        lines.append(f"\n[{timestamp}] {sender}: {content}")
+        ts = msg.get("timestamp", "")
+
+        # Format: HH:MM:SS.mmm
+        if ts:
+            try:
+                dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+                timestamp = dt.strftime("%H:%M:%S.%f")[:-3]
+            except:
+                timestamp = "??:??:??.???"
+        else:
+            timestamp = "??:??:??.???"
+
+        direction = "📤" if sender == client.peer_name else "📥"
+        lines.append(f"\n{direction} [{timestamp}] {sender}: {content}")
 
     return "\n".join(lines)
 

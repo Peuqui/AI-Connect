@@ -50,7 +50,8 @@ class MessageStore:
     ) -> str:
         """Speichert eine Nachricht und gibt die ID zurück."""
         msg_id = str(uuid.uuid4())
-        timestamp = datetime.utcnow().isoformat() + "Z"
+        # ISO-Format mit Millisekunden: 2024-01-03T14:30:45.123Z
+        timestamp = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
         context_json = json.dumps(context) if context else None
 
         await self._db.execute(
