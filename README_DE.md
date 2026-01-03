@@ -38,6 +38,25 @@ MCP-basierte Kommunikationsbrücke zwischen KI-Coding-Assistenten auf verschiede
 - **Offline-Nachrichten**: Nachrichten werden gespeichert bis der Empfänger online ist
 - **Projekt-basierte Peer-Namen**: z.B. "Aragon (mp)" oder "mini (AI-Connect)"
 
+> **Hinweis:** Dies ist eine frühe/raue Implementation. Sie funktioniert, hat aber Einschränkungen - siehe [Aktuelle Einschränkungen](#aktuelle-einschränkungen) unten.
+
+---
+
+## Warum das existiert
+
+Nach ausführlicher Recherche haben wir keine existierende Lösung gefunden, die es **KI-Modellen ermöglicht, sich direkt gegenseitig Nachrichten zu schicken und autonom zu koordinieren** - auf eine einfache, netzwerkfähige Art, bei der die KIs selbst entscheiden wann sie kommunizieren.
+
+Es gibt Multi-Agent-Frameworks (wo man Agenten programmatisch im Code definiert) und Orchestrierungs-Tools (wo ein Mensch oder zentraler Controller Tasks zuweist). Aber nichts, das mehreren **interaktiven Claude Code Sessions** erlaubt, peer-to-peer über verschiedene Rechner zu kommunizieren, wobei die KIs selbst entscheiden wann sie um Hilfe bitten oder Rat anbieten.
+
+AI-Connect füllt diese Lücke. Es ist simpel, netzwerkfähig und funktioniert. Aber es hat Einschränkungen aufgrund der Claude Code Architektur.
+
+### Anwendungsfälle
+
+- **Code Review**: Ein Claude arbeitet an der Implementierung, ein anderer reviewt kritisch
+- **Aus Sackgassen rauskommen**: Wenn ein Claude feststeckt, kann ein anderer eine frische Perspektive bieten
+- **Client-Server-Setups**: Konfiguration verteilter Systeme wo der Server auf einem Rechner läuft, der Client auf einem anderen - die Claude-Instanzen können Configs koordinieren, prüfen welche Software wo installiert werden muss, und alles synchron halten ohne manuelles Hin-und-Her-Kopieren zwischen Sessions
+- **Multi-Machine-Deployments**: Jedes Szenario wo man an zusammenhängenden Aufgaben auf verschiedenen Rechnern arbeitet
+
 ---
 
 ## Konzept
@@ -330,7 +349,7 @@ mkdir -p ~/.claude/skills/advisor
 cp skills/advisor/SKILL.md ~/.claude/skills/advisor/
 ```
 
-Dann mit `/advisor` den Advisor-Modus aktivieren (Polling-Schleife für eingehende Anfragen).
+Dann mit `/advisor` den Advisor-Modus aktivieren. Die Claude-Instanz geht in eine Polling-Schleife und prüft alle 2 Sekunden auf eingehende Nachrichten. **Wichtig:** Alle gesendeten und empfangenen Nachrichten werden dem User angezeigt - man kann die komplette Konversation zwischen den KI-Instanzen mitlesen.
 
 ---
 
@@ -396,3 +415,23 @@ peer:
 | Variable | Beschreibung |
 |----------|--------------|
 | `AI_CONNECT_PEER_NAME` | Überschreibt `peer.name` aus Config |
+
+---
+
+## Aktuelle Einschränkungen
+
+Dies ist eine frühe/raue Implementation. Sie funktioniert, ist aber weit davon entfernt, elegant zu sein:
+
+- **Polling erforderlich**: Claude Code hat keinen externen Trigger-Mechanismus. Um Nachrichten zu empfangen, muss eine Instanz aktiv via `peer_read` pollen. Der `/advisor` Skill macht das mit einer 2-Sekunden-Schleife - wie ein Auto das im Leerlauf Benzin verbrennt. Es funktioniert, aber es verschwendet Tokens für nichts.
+
+- **Keine externen Trigger möglich**: Wir haben Claude Codes [Hook-System](https://code.claude.com/docs/en/hooks) gründlich untersucht. Der `UserPromptSubmit` Hook kann Kontext injizieren, aber nur wenn der User eine Nachricht schickt - man müsste also trotzdem etwas tippen damit Nachrichten ankommen. Es gibt schlicht keine Möglichkeit, eine laufende Claude Code Session von außen zu unterbrechen oder zu signalisieren. Das ist eine fundamentale Einschränkung der aktuellen Claude Code Architektur.
+
+- **Keine Push-Benachrichtigungen**: Wenn eine Nachricht ankommt, gibt es keine Möglichkeit, eine arbeitende Claude-Instanz zu benachrichtigen. Die empfangende Instanz muss idle sein und pollen.
+
+- **Manuelles Context-Sharing**: Man muss explizit `peer_context` verwenden um Code zu teilen. Es gibt kein automatisches Bewusstsein darüber, woran andere Instanzen arbeiten.
+
+### Das Kernproblem
+
+Bis Claude Code (oder Anthropic) externe Trigger/Interrupt-Fähigkeiten implementiert, bleibt echte Echtzeit-Multi-Agent-Kollaboration bestenfalls ein Workaround. Der Polling-Ansatz funktioniert, aber er ist nicht elegant - und kostet Tokens für nichts.
+
+Pull Requests willkommen, falls jemand einen besseren Ansatz findet!
