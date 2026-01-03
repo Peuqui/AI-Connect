@@ -275,8 +275,8 @@ echo ""
 
 # Prüfe ob wir im richtigen Verzeichnis sind
 if [[ "$SERVER_MODE" == "server" ]]; then
-    if [[ ! -f "$SCRIPT_DIR/server/websocket_server.py" ]]; then
-        echo -e "${RED}Fehler: server/websocket_server.py nicht gefunden${NC}"
+    if [[ ! -f "$SCRIPT_DIR/server/main.py" ]]; then
+        echo -e "${RED}Fehler: server/main.py nicht gefunden${NC}"
         exit 1
     fi
 fi
@@ -369,7 +369,7 @@ After=network.target
 Type=simple
 User=$USER
 WorkingDirectory=$SCRIPT_DIR
-ExecStart=$SCRIPT_DIR/venv/bin/python -m server.websocket_server
+ExecStart=$SCRIPT_DIR/venv/bin/python -m server.main
 Restart=always
 RestartSec=5
 Environment=PYTHONUNBUFFERED=1
@@ -476,13 +476,13 @@ if [[ "$SERVER_MODE" == "server" ]]; then
 fi
 echo "  journalctl -u ai-connect-mcp.service -f"
 echo ""
-echo "VS Code MCP Konfiguration (~/.config/Code/User/settings.json):"
-echo '  "mcp": {'
-echo '    "servers": {'
-echo '      "ai-connect": {'
-echo '        "type": "http",'
-echo '        "url": "http://127.0.0.1:9998/mcp"'
-echo '      }'
+echo "VS Code MCP Konfiguration (~/.vscode-server/data/User/mcp.json oder ~/.config/Code/User/mcp.json):"
+echo '{'
+echo '  "servers": {'
+echo '    "ai-connect": {'
+echo '      "type": "sse",'
+echo '      "url": "http://127.0.0.1:9998/sse"'
 echo '    }'
 echo '  }'
+echo '}'
 echo ""
