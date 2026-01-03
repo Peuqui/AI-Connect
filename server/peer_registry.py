@@ -43,64 +43,43 @@ class PeerRegistry:
     ) -> Peer:
         """Registriert einen neuen Peer.
 
-        Wenn bereits ein Peer mit gleichem Namen existiert:
-        - Von derselben IP: Alte Verbindung wird geschlossen, neue übernimmt
-        - Von anderer IP: Suffix wird angehängt (dev → dev2 → dev3 → ...)
+        Der vollständige Name ist: "Maschinenname (Projekt)"
+        z.B. "Aragon (AIfred-Intelligence)" oder "mini (AI-Connect)"
+
+        Wenn bereits ein Peer mit gleichem vollständigen Namen existiert:
+        - Alte Verbindung wird geschlossen, neue übernimmt
 
         Returns:
-            Der registrierte Peer (mit ggf. angepasstem Namen)
+            Der registrierte Peer
         """
+        # Vollständigen Namen bauen: "Maschinenname (Projekt)"
+        if project:
+            full_name = f"{name} ({project})"
+        else:
+            full_name = name
+
         # Observer-Namen direkt durchlassen
         if name.startswith("_") and name.endswith("_"):
-            actual_name = name
-        elif name in self._peers:
-            existing = self._peers[name]
-            if existing.ip == ip and existing.project == project:
-                # Gleiche IP UND gleiches Projekt: Alte Verbindung ersetzen
-                # (z.B. VS Code startet mehrere MCP-Prozesse für dasselbe Fenster)
-                # Erst aus Registry entfernen, dann WebSocket schließen
-                # (verhindert Race Condition mit unregister)
-                del self._peers[name]
-                if existing.websocket:
-                    try:
-                        await existing.websocket.close()
-                    except Exception:
-                        pass
-                actual_name = name
-            else:
-                # Andere IP: Neuen Namen mit Suffix finden
-                actual_name = name
-                for i in range(2, 11):
-                    candidate = f"{name}{i}"
-                    if candidate not in self._peers:
-                        actual_name = candidate
-                        break
-                    elif self._peers[candidate].ip == ip and self._peers[candidate].project == project:
-                        # Gleiches Suffix von gleicher IP UND Projekt: Ersetzen
-                        old = self._peers[candidate]
-                        del self._peers[candidate]
-                        if old.websocket:
-                            try:
-                                await old.websocket.close()
-                            except Exception:
-                                pass
-                        actual_name = candidate
-                        break
-                else:
-                    # Fallback mit Timestamp
-                    import time
-                    actual_name = f"{name}_{int(time.time()) % 10000}"
-        else:
-            actual_name = name
+            full_name = name
+        elif full_name in self._peers:
+            # Gleicher vollständiger Name: Alte Verbindung ersetzen
+            # (z.B. VS Code startet mehrere MCP-Prozesse für dasselbe Fenster)
+            existing = self._peers[full_name]
+            del self._peers[full_name]
+            if existing.websocket:
+                try:
+                    await existing.websocket.close()
+                except Exception:
+                    pass
 
         peer = Peer(
-            name=actual_name,
+            name=full_name,
             ip=ip,
             connected_at=datetime.utcnow().isoformat() + "Z",
             project=project,
             websocket=websocket
         )
-        self._peers[actual_name] = peer
+        self._peers[full_name] = peer
 
         if self._on_join:
             await self._on_join(peer)
@@ -118,13 +97,15 @@ class PeerRegistry:
         return self._peers.get(name)
 
     def get_all(self) -> list[dict]:
-        """Gibt alle Peers als Liste zurück."""
+        """Gibt alle Peers als Liste zurück.
+
+        Der Name enthält bereits das Projekt: "Aragon (AIfred-Intelligence)"
+        """
         return [
             {
                 "name": p.name,
                 "ip": p.ip,
-                "connected_at": p.connected_at,
-                "project": p.project
+                "connected_at": p.connected_at
             }
             for p in self._peers.values()
         ]
