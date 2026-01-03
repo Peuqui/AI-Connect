@@ -61,9 +61,9 @@ class PeerRegistry:
         # Observer-Namen direkt durchlassen
         if name.startswith("_") and name.endswith("_"):
             full_name = name
-        elif full_name in self._peers:
-            # Gleicher vollständiger Name: Alte Verbindung ersetzen
-            # (z.B. VS Code startet mehrere MCP-Prozesse für dasselbe Fenster)
+
+        # Duplikat-Check: Alte Verbindung ersetzen wenn Name bereits existiert
+        if full_name in self._peers:
             existing = self._peers[full_name]
             del self._peers[full_name]
             if existing.websocket:
