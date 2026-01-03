@@ -4,6 +4,7 @@ import asyncio
 import logging
 import os
 import sys
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 
@@ -16,15 +17,16 @@ from fastmcp import FastMCP
 from bridge_client import init_client, get_client
 import tools
 
+# Log-Verzeichnis erstellen
+log_dir = Path.home() / ".config" / "ai-connect"
+log_dir.mkdir(parents=True, exist_ok=True)
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[logging.FileHandler(Path.home() / ".config" / "ai-connect" / "mcp.log")]
+    handlers=[logging.FileHandler(log_dir / "mcp.log")]
 )
 logger = logging.getLogger(__name__)
-
-# MCP Server erstellen
-mcp = FastMCP("AI-Connect")
 
 
 def load_config() -> dict:
@@ -44,6 +46,40 @@ def load_config() -> dict:
         "bridge": {"host": "192.168.0.252", "port": 9999},
         "peer": {"name": "default", "auto_connect": True}
     }
+
+
+@asynccontextmanager
+async def lifespan(app):
+    """Lifecycle manager - verbindet beim Start, trennt beim Ende."""
+    config = load_config()
+    bridge = config.get("bridge", {})
+    peer = config.get("peer", {})
+
+    # Peer-Name aus Umgebung oder Config
+    peer_name = os.environ.get("AI_CONNECT_PEER_NAME", peer.get("name", "default"))
+
+    if peer.get("auto_connect", True):
+        try:
+            client = await init_client(
+                host=bridge.get("host", "192.168.0.252"),
+                port=bridge.get("port", 9999),
+                peer_name=peer_name
+            )
+            logger.info(f"Mit Bridge verbunden als '{peer_name}'")
+        except Exception as e:
+            logger.error(f"Verbindung zum Bridge fehlgeschlagen: {e}")
+
+    yield  # Server läuft
+
+    # Cleanup beim Beenden
+    client = get_client()
+    if client:
+        await client.disconnect()
+        logger.info("Bridge-Verbindung getrennt")
+
+
+# MCP Server mit Lifespan erstellen
+mcp = FastMCP("AI-Connect", lifespan=lifespan)
 
 
 # Tools registrieren
@@ -123,37 +159,8 @@ async def peer_status() -> str:
         return f"Nicht verbunden. Bridge Server: {client.host}:{client.port}"
 
 
-async def startup() -> None:
-    """Initialisiert die Bridge-Verbindung."""
-    config = load_config()
-    bridge = config.get("bridge", {})
-    peer = config.get("peer", {})
-
-    # Peer-Name aus Umgebung oder Config
-    peer_name = os.environ.get("AI_CONNECT_PEER_NAME", peer.get("name", "default"))
-
-    if peer.get("auto_connect", True):
-        try:
-            await init_client(
-                host=bridge.get("host", "192.168.0.252"),
-                port=bridge.get("port", 9999),
-                peer_name=peer_name
-            )
-            logger.info(f"Mit Bridge verbunden als '{peer_name}'")
-        except Exception as e:
-            logger.error(f"Verbindung zum Bridge fehlgeschlagen: {e}")
-
-
 def main() -> None:
     """Startet den MCP Server."""
-    # Log-Verzeichnis erstellen
-    log_dir = Path.home() / ".config" / "ai-connect"
-    log_dir.mkdir(parents=True, exist_ok=True)
-
-    # Startup ausführen
-    asyncio.get_event_loop().run_until_complete(startup())
-
-    # MCP Server starten
     mcp.run()
 
 
