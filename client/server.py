@@ -3,14 +3,18 @@
 import asyncio
 import logging
 import os
+import sys
 from pathlib import Path
 from typing import Optional
+
+# Füge client-Verzeichnis zum Pfad hinzu für direkte Ausführung
+sys.path.insert(0, str(Path(__file__).parent))
 
 import yaml
 from fastmcp import FastMCP
 
-from .bridge_client import init_client, get_client
-from . import tools
+from bridge_client import init_client, get_client
+import tools
 
 logging.basicConfig(
     level=logging.INFO,

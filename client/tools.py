@@ -2,7 +2,7 @@
 
 from typing import Optional
 
-from .bridge_client import get_client
+from bridge_client import get_client
 
 
 async def peer_list() -> str:
