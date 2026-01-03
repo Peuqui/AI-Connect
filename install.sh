@@ -1,12 +1,13 @@
 #!/bin/bash
 #
-# AI-Connect Installation Script
+# AI-Connect Installation Script (Server-Modus)
 # Installiert Bridge Server, MCP HTTP Server und PolicyKit-Regeln
 #
 # Verwendung:
-#   ./install.sh          # Vollinstallation (fragt nach Config)
-#   ./install.sh --update # Nur Services aktualisieren (Config bleibt)
-#   ./install.sh --status # Zeigt nur Status an
+#   ./install.sh            # Vollinstallation (fragt nach Config)
+#   ./install.sh --update   # Nur Services aktualisieren (Config bleibt)
+#   ./install.sh --status   # Zeigt nur Status an
+#   ./install.sh --uninstall # Deinstallation
 #
 
 set -e
@@ -24,6 +25,7 @@ NC='\033[0m' # No Color
 # Argumente parsen
 UPDATE_ONLY=false
 STATUS_ONLY=false
+UNINSTALL=false
 
 for arg in "$@"; do
     case $arg in
@@ -33,18 +35,99 @@ for arg in "$@"; do
         --status|-s)
             STATUS_ONLY=true
             ;;
+        --uninstall|--remove)
+            UNINSTALL=true
+            ;;
         --help|-h)
-            echo "AI-Connect Install Script"
+            echo "AI-Connect Install Script (Server-Modus)"
+            echo ""
+            echo "Installiert Bridge Server + MCP HTTP Server."
+            echo "Für Client-Only Installation: ./install-client.sh"
             echo ""
             echo "Verwendung:"
-            echo "  ./install.sh          # Vollinstallation"
-            echo "  ./install.sh --update # Nur Services aktualisieren"
-            echo "  ./install.sh --status # Status anzeigen"
+            echo "  ./install.sh            # Vollinstallation"
+            echo "  ./install.sh --update   # Nur Services aktualisieren"
+            echo "  ./install.sh --status   # Status anzeigen"
+            echo "  ./install.sh --uninstall # Deinstallation"
             echo ""
             exit 0
             ;;
     esac
 done
+
+# Uninstall-Funktion
+do_uninstall() {
+    echo "=========================================="
+    echo "  AI-Connect Server Deinstallation"
+    echo "=========================================="
+    echo ""
+
+    read -p "Wirklich deinstallieren? [j/N]: " CONFIRM
+    if [[ ! "$CONFIRM" =~ ^[jJyY]$ ]]; then
+        echo "Abgebrochen."
+        exit 0
+    fi
+    echo ""
+
+    # 1. Services stoppen und deaktivieren
+    echo -e "${YELLOW}[1/4]${NC} Services stoppen..."
+    for SERVICE in ai-connect-mcp.service ai-connect.service; do
+        if systemctl is-active --quiet $SERVICE 2>/dev/null; then
+            sudo systemctl stop $SERVICE
+            echo -e "  ${GREEN}$SERVICE gestoppt${NC}"
+        fi
+        if systemctl is-enabled --quiet $SERVICE 2>/dev/null; then
+            sudo systemctl disable $SERVICE 2>/dev/null
+        fi
+    done
+
+    # 2. Systemd Service-Dateien entfernen
+    echo -e "${YELLOW}[2/4]${NC} Service-Dateien entfernen..."
+    for SERVICE in ai-connect.service ai-connect-mcp.service; do
+        if [[ -f "/etc/systemd/system/$SERVICE" ]]; then
+            sudo rm "/etc/systemd/system/$SERVICE"
+            echo -e "  ${GREEN}$SERVICE entfernt${NC}"
+        fi
+    done
+    sudo systemctl daemon-reload
+
+    # 3. PolicyKit Regel entfernen
+    echo -e "${YELLOW}[3/4]${NC} PolicyKit Regel entfernen..."
+    if [[ -f "/etc/polkit-1/rules.d/50-ai-connect.rules" ]]; then
+        sudo rm /etc/polkit-1/rules.d/50-ai-connect.rules
+        sudo systemctl restart polkit.service
+        echo -e "  ${GREEN}PolicyKit Regel entfernt${NC}"
+    else
+        echo "  PolicyKit Regel existiert nicht"
+    fi
+
+    # 4. Config behalten oder löschen?
+    echo -e "${YELLOW}[4/4]${NC} Konfiguration..."
+    if [[ -f "$CONFIG_DIR/config.yaml" ]]; then
+        read -p "  Config-Datei auch löschen? [j/N]: " DELETE_CONFIG
+        if [[ "$DELETE_CONFIG" =~ ^[jJyY]$ ]]; then
+            rm -rf "$CONFIG_DIR"
+            echo -e "  ${GREEN}Config gelöscht${NC}"
+        else
+            echo -e "  ${YELLOW}Config behalten: $CONFIG_DIR${NC}"
+        fi
+    fi
+
+    echo ""
+    echo "=========================================="
+    echo -e "  ${GREEN}Deinstallation abgeschlossen!${NC}"
+    echo "=========================================="
+    echo ""
+    echo "Hinweis: Das venv-Verzeichnis wurde nicht gelöscht."
+    echo "Falls gewünscht: rm -rf $SCRIPT_DIR/venv"
+    echo ""
+    exit 0
+}
+
+# Uninstall aufrufen?
+if $UNINSTALL; then
+    do_uninstall
+fi
 
 # Status-Funktion
 show_status() {
