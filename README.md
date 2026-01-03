@@ -38,6 +38,25 @@ MCP-based communication bridge between AI coding assistants across different mac
 - **Offline Messages**: Messages are stored until the recipient comes online
 - **Project-based Peer Names**: e.g., "Aragon (myproject)" or "mini (AI-Connect)"
 
+> **Note:** This is an early/rough implementation. It works, but has limitations - see [Current Limitations](#current-limitations) below.
+
+---
+
+## Why This Exists
+
+After extensive research, we found no existing solution that allows **AI models to directly send messages to each other and coordinate autonomously** - in a simple, network-capable way where the AIs themselves decide when to communicate.
+
+There are multi-agent frameworks (where you programmatically define agents in code) and orchestration tools (where a human or central controller assigns tasks). But nothing that lets multiple **interactive Claude Code sessions** talk to each other peer-to-peer across different machines, with the AIs deciding themselves when to ask for help or offer advice.
+
+AI-Connect fills this gap. It's simple, network-capable, and works. But it comes with limitations due to Claude Code's architecture.
+
+### Use Cases
+
+- **Code review**: One Claude works on implementation, another reviews critically
+- **Getting unstuck**: When one Claude hits a wall, ask another for a fresh perspective
+- **Client-Server setups**: Configuring distributed systems where server runs on one machine, client on another - the Claude instances can coordinate configs, check what software needs to be installed where, and keep everything in sync without manual copy-paste between sessions
+- **Multi-machine deployments**: Any scenario where you're working on related tasks across different computers
+
 ---
 
 ## Concept
@@ -326,7 +345,7 @@ mkdir -p ~/.claude/skills/advisor
 cp skills/advisor/SKILL.md ~/.claude/skills/advisor/
 ```
 
-Then activate advisor mode with `/advisor` (polling loop for incoming requests).
+Then activate advisor mode with `/advisor`. The Claude instance enters a polling loop, checking for incoming messages every 2 seconds. **Important:** All sent and received messages are displayed to the user - you can read the full conversation between the AI instances.
 
 ---
 
@@ -392,6 +411,26 @@ peer:
 | Variable | Description |
 |----------|-------------|
 | `AI_CONNECT_PEER_NAME` | Overrides `peer.name` from config |
+
+---
+
+## Current Limitations
+
+This is an early/rough implementation. It works, but is far from elegant:
+
+- **Polling required**: Claude Code has no external trigger mechanism. To receive messages, an instance must actively poll via `peer_read`. The `/advisor` skill does this with a 2-second loop - like a car burning fuel while idling. It works, but wastes tokens doing nothing useful.
+
+- **No external triggers possible**: We thoroughly investigated Claude Code's [hooks system](https://code.claude.com/docs/en/hooks). The `UserPromptSubmit` hook can inject context, but only when the user sends a message - so you'd still need to type something for messages to arrive. There is simply no way to externally interrupt or signal a running Claude Code session. This is a fundamental limitation of the current Claude Code architecture.
+
+- **No push notifications**: When a message arrives, there's no way to notify a working Claude instance. The receiving instance must be idle and polling.
+
+- **Manual context sharing**: You need to explicitly use `peer_context` to share code. There's no automatic awareness of what other instances are working on.
+
+### The Core Problem
+
+Until Claude Code (or Anthropic) implements external trigger/interrupt capabilities, true real-time multi-agent collaboration remains a workaround at best. The polling approach works, but it's not elegant - and it costs tokens for nothing.
+
+Pull requests welcome if you find a better approach!
 
 ---
 
