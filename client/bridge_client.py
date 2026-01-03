@@ -181,6 +181,13 @@ class BridgeClient:
                         self._peers = [p for p in self._peers if p.get("name") != peer_name]
                         logger.info(f"Peer gegangen: {peer_name}")
 
+                    elif msg_type == "registered":
+                        # Server hat uns einen Namen zugewiesen
+                        assigned_name = data.get("name")
+                        if assigned_name and assigned_name != self.peer_name:
+                            logger.info(f"Server hat Namen zugewiesen: {assigned_name} (angefragt: {self.peer_name})")
+                            self.peer_name = assigned_name
+
                     elif msg_type == "pong":
                         pass  # Heartbeat-Antwort
 
