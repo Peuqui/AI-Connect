@@ -15,7 +15,7 @@ from . import tools
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[logging.FileHandler(Path.home() / ".ai-connect" / "mcp.log")]
+    handlers=[logging.FileHandler(Path.home() / ".config" / "ai-connect" / "mcp.log")]
 )
 logger = logging.getLogger(__name__)
 
@@ -26,7 +26,7 @@ mcp = FastMCP("AI-Connect")
 def load_config() -> dict:
     """Lädt die Konfiguration."""
     config_paths = [
-        Path.home() / ".ai-connect" / "config.yaml",
+        Path.home() / ".config" / "ai-connect" / "config.yaml",
         Path(__file__).parent.parent / "config.yaml",
         Path("config.yaml"),
     ]
@@ -143,7 +143,7 @@ async def startup() -> None:
 def main() -> None:
     """Startet den MCP Server."""
     # Log-Verzeichnis erstellen
-    log_dir = Path.home() / ".ai-connect"
+    log_dir = Path.home() / ".config" / "ai-connect"
     log_dir.mkdir(parents=True, exist_ok=True)
 
     # Startup ausführen
