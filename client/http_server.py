@@ -7,7 +7,6 @@ zum Bridge Server. VS Code verbindet sich per HTTP/SSE.
 import asyncio
 import logging
 import os
-import signal
 import sys
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -20,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 import yaml
 from fastmcp import FastMCP
 
-from bridge_client import BridgeClient, get_client
+from bridge_client import BridgeClient, get_client, init_client
 
 # Log-Verzeichnis erstellen
 log_dir = Path.home() / ".config" / "ai-connect"
@@ -35,9 +34,6 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
-
-# Globaler Client - wird einmal beim Start initialisiert
-_bridge_client: Optional[BridgeClient] = None
 
 
 def load_config() -> dict:
@@ -63,10 +59,10 @@ def load_config() -> dict:
     }
 
 
-async def init_bridge_client(config: dict) -> Optional[BridgeClient]:
-    """Initialisiert den Bridge Client einmalig."""
-    global _bridge_client
-
+@asynccontextmanager
+async def lifespan(app):
+    """Lifecycle manager - verbindet beim Start, trennt beim Ende."""
+    config = load_config()
     bridge = config.get("bridge", {})
     peer = config.get("peer", {})
 
@@ -74,26 +70,42 @@ async def init_bridge_client(config: dict) -> Optional[BridgeClient]:
     host = bridge.get("host", "192.168.0.252")
     port = bridge.get("port", 9999)
 
-    _bridge_client = BridgeClient(host=host, port=port, peer_name=base_name)
+    if peer.get("auto_connect", True):
+        try:
+            client = await init_client(
+                host=host,
+                port=port,
+                peer_name=base_name
+            )
+            logger.info(f"Mit Bridge verbunden als '{client.peer_name}'")
+        except Exception as e:
+            logger.error(f"Verbindung zum Bridge fehlgeschlagen: {e}")
 
-    if await _bridge_client.connect():
-        logger.info(f"Mit Bridge verbunden als '{_bridge_client.peer_name}'")
-        return _bridge_client
-    else:
-        logger.error("Verbindung zum Bridge fehlgeschlagen")
-        return None
+    yield  # Server läuft
+
+    # Cleanup beim Beenden
+    client = get_client()
+    if client:
+        await client.disconnect()
+        logger.info("Bridge-Verbindung getrennt")
 
 
-def get_bridge_client() -> Optional[BridgeClient]:
-    """Gibt den globalen Bridge Client zurück."""
-    return _bridge_client
+# MCP Server mit Lifespan erstellen
+mcp = FastMCP("AI-Connect", lifespan=lifespan)
 
 
-# MCP Server erstellen (ohne lifespan - wir managen den Client selbst)
-mcp = FastMCP("AI-Connect")
+def format_timestamp(ts: Optional[str] = None) -> str:
+    """Formatiert einen Zeitstempel als HH:MM:SS.mmm."""
+    if ts:
+        try:
+            dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+            return dt.strftime("%H:%M:%S.%f")[:-3]
+        except:
+            pass
+    return datetime.now().strftime("%H:%M:%S.%f")[:-3]
 
 
-# Tools registrieren - nutzen den globalen Client
+# Tools registrieren
 @mcp.tool()
 async def peer_list() -> str:
     """Zeigt alle online verbundenen Peers.
@@ -101,7 +113,7 @@ async def peer_list() -> str:
     Gibt eine Liste aller aktuell mit dem Bridge Server
     verbundenen KI-Assistenten zurück.
     """
-    client = get_bridge_client()
+    client = get_client()
     if not client or not client.connected:
         return "Nicht mit Bridge Server verbunden."
 
@@ -131,7 +143,7 @@ async def peer_send(to: str, message: str, file: Optional[str] = None, lines: Op
         peer_send("Aragon", "Schau dir mal die Funktion an", file="src/api.py", lines="42-58")
         peer_send("*", "Hat jemand Zeit für ein Review?")
     """
-    client = get_bridge_client()
+    client = get_client()
     if not client or not client.connected:
         return "Nicht mit Bridge Server verbunden."
 
@@ -145,7 +157,7 @@ async def peer_send(to: str, message: str, file: Optional[str] = None, lines: Op
 
     success = await client.send_message(to, message, context)
     if success:
-        timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]  # HH:MM:SS.mmm
+        timestamp = format_timestamp()
         return f"📤 [{timestamp}] [{client.peer_name} → {to}]: {message}"
     else:
         return "Fehler beim Senden der Nachricht."
@@ -158,7 +170,7 @@ async def peer_read() -> str:
     Gibt alle Nachrichten zurück die seit dem letzten Aufruf
     eingegangen sind und markiert sie als gelesen.
     """
-    client = get_bridge_client()
+    client = get_client()
     if not client or not client.connected:
         return "Nicht mit Bridge Server verbunden."
 
@@ -172,18 +184,7 @@ async def peer_read() -> str:
         sender = msg.get("from", "unbekannt")
         content = msg.get("content", "")
         context = msg.get("context")
-
-        # Zeitstempel vom Server oder aktuell
-        ts = msg.get("timestamp", "")
-        if ts:
-            # ISO-Format: 2024-01-03T14:30:45.123Z -> 14:30:45.123
-            try:
-                dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
-                timestamp = dt.strftime("%H:%M:%S.%f")[:-3]
-            except:
-                timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
-        else:
-            timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+        timestamp = format_timestamp(msg.get("timestamp"))
 
         result_lines.append(f"📥 [{timestamp}] [{sender} → {me}]: {content}")
 
@@ -207,7 +208,7 @@ async def peer_history(peer: str, limit: int = 20) -> str:
         peer: Name des Peers
         limit: Maximale Anzahl der Nachrichten (Standard: 20)
     """
-    client = get_bridge_client()
+    client = get_client()
     if not client or not client.connected:
         return "Nicht mit Bridge Server verbunden."
 
@@ -220,17 +221,7 @@ async def peer_history(peer: str, limit: int = 20) -> str:
     for msg in messages[-limit:]:
         sender = msg.get("from", "?")
         content = msg.get("content", "")
-        ts = msg.get("timestamp", "")
-
-        # Format: HH:MM:SS.mmm
-        if ts:
-            try:
-                dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
-                timestamp = dt.strftime("%H:%M:%S.%f")[:-3]
-            except:
-                timestamp = "??:??:??.???"
-        else:
-            timestamp = "??:??:??.???"
+        timestamp = format_timestamp(msg.get("timestamp"))
 
         direction = "📤" if sender == client.peer_name else "📥"
         lines.append(f"\n{direction} [{timestamp}] {sender}: {content}")
@@ -249,7 +240,7 @@ async def peer_context(file: str, lines: Optional[str] = None, message: Optional
         lines: Optional - Zeilennummern (z.B. "42-58")
         message: Optional - Begleitende Nachricht
     """
-    client = get_bridge_client()
+    client = get_client()
     if not client or not client.connected:
         return "Nicht mit Bridge Server verbunden."
 
@@ -271,7 +262,7 @@ async def peer_context(file: str, lines: Optional[str] = None, message: Optional
 @mcp.tool()
 async def peer_status() -> str:
     """Zeigt den Verbindungsstatus zum Bridge Server."""
-    client = get_bridge_client()
+    client = get_client()
     if not client:
         return "Client nicht initialisiert."
 
@@ -284,38 +275,17 @@ async def peer_status() -> str:
 
 
 def main() -> None:
-    """Startet den HTTP MCP Server mit persistenter Bridge-Verbindung."""
+    """Startet den HTTP MCP Server."""
     config = load_config()
-
-    # MCP Port aus Config
     mcp_config = config.get("mcp", {})
     port = mcp_config.get("port", 9998)
     host = mcp_config.get("host", "127.0.0.1")
 
-    # Bridge Client in separatem Thread initialisieren
-    import threading
-
-    def init_bridge():
-        """Initialisiert Bridge Client im Hintergrund."""
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        loop.run_until_complete(init_bridge_client(config))
-        # Event loop am laufen halten für WebSocket
-        loop.run_forever()
-
-    bridge_thread = threading.Thread(target=init_bridge, daemon=True)
-    bridge_thread.start()
-
-    # Warte kurz auf Verbindung
-    import time
-    time.sleep(1)
-
     logger.info(f"Starte MCP HTTP Server auf {host}:{port}")
 
-    # Server starten (blockiert)
     try:
         mcp.run(
-            transport="streamable-http",
+            transport="sse",
             host=host,
             port=port,
         )
