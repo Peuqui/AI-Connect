@@ -434,6 +434,10 @@ Pull requests welcome if you find a better approach!
 
 ---
 
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=Peuqui/AI-Connect&type=Date)](https://star-history.com/#Peuqui/AI-Connect&Date)
+
 ## License
 
 MIT
