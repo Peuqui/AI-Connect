@@ -5719,3 +5719,215 @@
   "stars": 5,
   "forks": 3
 }
+{
+  "date": "2026-03-24",
+  "views": {
+    "count": 18,
+    "uniques": 12,
+    "views": [
+      {
+        "timestamp": "2026-03-09T00:00:00Z",
+        "count": 2,
+        "uniques": 2
+      },
+      {
+        "timestamp": "2026-03-10T00:00:00Z",
+        "count": 5,
+        "uniques": 3
+      },
+      {
+        "timestamp": "2026-03-11T00:00:00Z",
+        "count": 0,
+        "uniques": 0
+      },
+      {
+        "timestamp": "2026-03-12T00:00:00Z",
+        "count": 1,
+        "uniques": 1
+      },
+      {
+        "timestamp": "2026-03-13T00:00:00Z",
+        "count": 0,
+        "uniques": 0
+      },
+      {
+        "timestamp": "2026-03-14T00:00:00Z",
+        "count": 0,
+        "uniques": 0
+      },
+      {
+        "timestamp": "2026-03-15T00:00:00Z",
+        "count": 0,
+        "uniques": 0
+      },
+      {
+        "timestamp": "2026-03-16T00:00:00Z",
+        "count": 1,
+        "uniques": 1
+      },
+      {
+        "timestamp": "2026-03-17T00:00:00Z",
+        "count": 1,
+        "uniques": 1
+      },
+      {
+        "timestamp": "2026-03-18T00:00:00Z",
+        "count": 1,
+        "uniques": 1
+      },
+      {
+        "timestamp": "2026-03-19T00:00:00Z",
+        "count": 1,
+        "uniques": 1
+      },
+      {
+        "timestamp": "2026-03-20T00:00:00Z",
+        "count": 2,
+        "uniques": 2
+      },
+      {
+        "timestamp": "2026-03-21T00:00:00Z",
+        "count": 2,
+        "uniques": 1
+      },
+      {
+        "timestamp": "2026-03-22T00:00:00Z",
+        "count": 2,
+        "uniques": 1
+      }
+    ]
+  },
+  "clones": {
+    "count": 195,
+    "uniques": 66,
+    "clones": [
+      {
+        "timestamp": "2026-03-09T00:00:00Z",
+        "count": 24,
+        "uniques": 8
+      },
+      {
+        "timestamp": "2026-03-10T00:00:00Z",
+        "count": 10,
+        "uniques": 6
+      },
+      {
+        "timestamp": "2026-03-11T00:00:00Z",
+        "count": 9,
+        "uniques": 6
+      },
+      {
+        "timestamp": "2026-03-12T00:00:00Z",
+        "count": 8,
+        "uniques": 4
+      },
+      {
+        "timestamp": "2026-03-13T00:00:00Z",
+        "count": 11,
+        "uniques": 7
+      },
+      {
+        "timestamp": "2026-03-14T00:00:00Z",
+        "count": 12,
+        "uniques": 8
+      },
+      {
+        "timestamp": "2026-03-15T00:00:00Z",
+        "count": 27,
+        "uniques": 7
+      },
+      {
+        "timestamp": "2026-03-16T00:00:00Z",
+        "count": 26,
+        "uniques": 7
+      },
+      {
+        "timestamp": "2026-03-17T00:00:00Z",
+        "count": 10,
+        "uniques": 6
+      },
+      {
+        "timestamp": "2026-03-18T00:00:00Z",
+        "count": 13,
+        "uniques": 8
+      },
+      {
+        "timestamp": "2026-03-19T00:00:00Z",
+        "count": 14,
+        "uniques": 9
+      },
+      {
+        "timestamp": "2026-03-20T00:00:00Z",
+        "count": 11,
+        "uniques": 7
+      },
+      {
+        "timestamp": "2026-03-21T00:00:00Z",
+        "count": 8,
+        "uniques": 5
+      },
+      {
+        "timestamp": "2026-03-22T00:00:00Z",
+        "count": 12,
+        "uniques": 8
+      }
+    ]
+  },
+  "referrers": [
+    {
+      "referrer": "reddit.com",
+      "count": 11,
+      "uniques": 8
+    },
+    {
+      "referrer": "Google",
+      "count": 2,
+      "uniques": 1
+    },
+    {
+      "referrer": "github.com",
+      "count": 1,
+      "uniques": 1
+    }
+  ],
+  "paths": [
+    {
+      "path": "/Peuqui/AI-Connect",
+      "title": "Peuqui/AI-Connect: Connect two Claude Code instances running in VSCode extens...",
+      "count": 12,
+      "uniques": 10
+    },
+    {
+      "path": "/peuqui/ai-connect",
+      "title": "Peuqui/AI-Connect: Connect two Claude Code instances running in VSCode extens...",
+      "count": 2,
+      "uniques": 1
+    },
+    {
+      "path": "/Peuqui/AI-Connect/actions",
+      "title": "Workflow runs · Peuqui/AI-Connect",
+      "count": 1,
+      "uniques": 1
+    },
+    {
+      "path": "/Peuqui/AI-Connect/blob/main/pyproject.toml",
+      "title": "AI-Connect/pyproject.toml at main · Peuqui/AI-Connect · GitHub",
+      "count": 1,
+      "uniques": 1
+    },
+    {
+      "path": "/Peuqui/AI-Connect/fork",
+      "title": "Fork Peuqui/AI-Connect",
+      "count": 1,
+      "uniques": 1
+    },
+    {
+      "path": "/Peuqui/AI-Connect/tree/main/server",
+      "title": "AI-Connect/server at main · Peuqui/AI-Connect",
+      "count": 1,
+      "uniques": 1
+    }
+  ],
+  "stars": 5,
+  "forks": 3
+}
