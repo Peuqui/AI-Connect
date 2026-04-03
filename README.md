@@ -446,6 +446,6 @@ MIT
 
 ## ☕ Support
 
-If you find this project useful, consider buying me a coffee:
+If you find this project useful, consider supporting me:
 
-<a href="https://buymeacoffee.com/peuqui" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="50"></a>
+<a href="https://ko-fi.com/peuqui" target="_blank"><img src="https://storage.ko-fi.com/cdn/kofi2.png?v=6" alt="Support me on Ko-fi" height="50"></a>
