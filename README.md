@@ -441,3 +441,11 @@ Pull requests welcome if you find a better approach!
 ## License
 
 MIT
+
+---
+
+## ☕ Support
+
+If you find this project useful, consider buying me a coffee:
+
+<a href="https://buymeacoffee.com/peuqui" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="50"></a>
