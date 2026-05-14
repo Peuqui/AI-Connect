@@ -1,0 +1,12 @@
+# AI-Connect Konfiguration
+# Kopiere diese Datei nach ~/.config/ai-connect/config.yaml und passe sie an.
+
+bridge:
+  host: "192.168.0.252"
+  port: 9999
+
+peer:
+  auto_connect: true
+  # Peer-Name wird automatisch als "Hostname:Projekt" gebildet
+  # (z.B. mini:AIfred-Intelligence, Aragon:FreeEchoDot2).
+  # Optional manuell überschreiben über ENV: AI_CONNECT_PEER_NAME

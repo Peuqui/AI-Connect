@@ -33,11 +33,18 @@ class BridgeClient:
         self._reconnecting = False
         self._should_reconnect = True  # Auto-Reconnect aktiviert
         self._message_queue: list[dict] = []
+        self._message_event: Optional[asyncio.Event] = None
         self._peers: list[dict] = []
         self._on_message: Optional[Callable] = None
         self._reconnect_task: Optional[asyncio.Task] = None
         self._receive_task: Optional[asyncio.Task] = None
         self._ping_task: Optional[asyncio.Task] = None
+
+    def _ensure_event(self) -> asyncio.Event:
+        """Lazy-init des Message-Events im aktuellen Event-Loop."""
+        if self._message_event is None:
+            self._message_event = asyncio.Event()
+        return self._message_event
 
     def _detect_project(self) -> str:
         """Erkennt das aktuelle Projekt basierend auf cwd.
@@ -169,7 +176,24 @@ class BridgeClient:
         """Holt und leert die Nachrichtenwarteschlange."""
         messages = self._message_queue.copy()
         self._message_queue.clear()
+        if self._message_event is not None:
+            self._message_event.clear()
         return messages
+
+    async def wait_for_messages(self, timeout: float = 60.0) -> list[dict]:
+        """Wartet bis neue Nachrichten ankommen oder Timeout greift.
+
+        Returnt sofort wenn Queue bereits gefüllt ist. Sonst blockiert
+        es bis _receive_loop das Event setzt oder timeout Sekunden
+        vergehen. Leert die Queue beim Returnen.
+        """
+        if not self._message_queue:
+            event = self._ensure_event()
+            try:
+                await asyncio.wait_for(event.wait(), timeout=timeout)
+            except asyncio.TimeoutError:
+                return []
+        return self.pop_messages()
 
     async def _send(self, data: dict) -> bool:
         """Sendet JSON-Daten über WebSocket."""
@@ -202,12 +226,15 @@ class BridgeClient:
 
                     if msg_type == "message":
                         self._message_queue.append(data)
+                        self._ensure_event().set()
                         if self._on_message:
                             await self._on_message(data)
 
                     elif msg_type == "unread":
                         for msg in data.get("messages", []):
                             self._message_queue.append(msg)
+                        if data.get("messages"):
+                            self._ensure_event().set()
 
                     elif msg_type == "peer_list":
                         self._peers = data.get("peers", [])

@@ -21,7 +21,7 @@ async def peer_list() -> str:
 
     lines = ["Online Peers:"]
     for peer in peers:
-        # Name enthält bereits das Projekt: "Aragon (AIfred-Intelligence)"
+        # Name hat Format "Host:Projekt", z.B. "Mini:AIfred-Intelligence"
         lines.append(f"  - {peer['name']} [{peer['ip']}]")
 
     return "\n".join(lines)
@@ -81,6 +81,44 @@ async def peer_read() -> str:
         lines.append(f"📥 [{sender} → {me}]: {content}")
 
         # Kontext falls vorhanden
+        if context:
+            ctx_parts = []
+            if context.get("file"):
+                ctx_parts.append(context['file'])
+            if context.get("lines"):
+                ctx_parts.append(f"Z.{context['lines']}")
+            if ctx_parts:
+                lines.append(f"   📎 {' '.join(ctx_parts)}")
+
+    return "\n".join(lines)
+
+
+async def peer_wait(timeout: int = 60) -> str:
+    """Wartet (Long-Poll) bis neue Nachrichten ankommen oder Timeout greift.
+
+    Returnt sofort sobald eine Nachricht eintrifft (Latenz ~0ms statt
+    Polling-Lag). Returnt leer wenn der Timeout abläuft ohne Nachricht.
+
+    Args:
+        timeout: Maximale Wartezeit in Sekunden (Standard: 60)
+    """
+    client = get_client()
+    if not client or not client.connected:
+        return "❌ Nicht mit Bridge Server verbunden."
+
+    messages = await client.wait_for_messages(timeout=float(timeout))
+    if not messages:
+        return "📭 Timeout - keine neuen Nachrichten."
+
+    me = client.peer_name
+    lines = []
+    for msg in messages:
+        sender = msg.get("from", "unbekannt")
+        content = msg.get("content", "")
+        context = msg.get("context")
+
+        lines.append(f"📥 [{sender} → {me}]: {content}")
+
         if context:
             ctx_parts = []
             if context.get("file"):
