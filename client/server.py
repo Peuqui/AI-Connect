@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import os
+import socket
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -29,46 +30,44 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+CONFIG_PATH = Path.home() / ".config" / "ai-connect" / "config.yaml"
+
+
 def load_config() -> dict:
-    """Lädt die Konfiguration."""
-    config_paths = [
-        Path.home() / ".config" / "ai-connect" / "config.yaml",
-        Path(__file__).parent.parent / "config.yaml",
-        Path("config.yaml"),
-    ]
+    """Lädt die Konfiguration aus ~/.config/ai-connect/config.yaml.
 
-    for path in config_paths:
-        if path.exists():
-            with open(path) as f:
-                return yaml.safe_load(f)
-
-    return {
-        "bridge": {"host": "192.168.0.252", "port": 9999},
-        "peer": {"name": "default", "auto_connect": True}
-    }
+    Wirft FileNotFoundError wenn die Config fehlt — bewusst kein
+    Fallback auf hardcoded Defaults oder andere Pfade.
+    """
+    if not CONFIG_PATH.exists():
+        raise FileNotFoundError(
+            f"AI-Connect Config fehlt: {CONFIG_PATH}\n"
+            f"Lege sie nach config.yaml.example an."
+        )
+    with open(CONFIG_PATH) as f:
+        return yaml.safe_load(f)
 
 
 @asynccontextmanager
 async def lifespan(app):
     """Lifecycle manager - verbindet beim Start, trennt beim Ende."""
     config = load_config()
-    bridge = config.get("bridge", {})
+    bridge = config["bridge"]
     peer = config.get("peer", {})
 
-    # Basis-Name aus Umgebung oder Config + PID für Eindeutigkeit
-    base_name = os.environ.get("AI_CONNECT_PEER_NAME", peer.get("name", "default"))
-    # Füge PID hinzu um mehrere Instanzen zu unterscheiden
-    unique_name = f"{base_name}#{os.getpid()}"
-    host = bridge.get("host", "192.168.0.252")
-    port = bridge.get("port", 9999)
+    # Peer-Name: "Hostname:Projekt" — hostübergreifend eindeutig.
+    # Server vergibt automatisch Suffix bei Kollision (name → name2 → name3).
+    # Override per ENV bleibt möglich.
+    hostname = socket.gethostname()
+    project = Path.cwd().name
+    peer_name = os.environ.get("AI_CONNECT_PEER_NAME", f"{hostname}:{project}")
 
     if peer.get("auto_connect", True):
         try:
-            # Server vergibt automatisch Namen bei Kollision (dev → dev2 → dev3)
             client = await init_client(
-                host=host,
-                port=port,
-                peer_name=unique_name
+                host=bridge["host"],
+                port=bridge["port"],
+                peer_name=peer_name
             )
             # Tatsächlicher Name kann abweichen (vom Server zugewiesen)
             logger.info(f"Mit Bridge verbunden als '{client.peer_name}'")
@@ -125,6 +124,20 @@ async def peer_read() -> str:
     eingegangen sind und markiert sie als gelesen.
     """
     return await tools.peer_read()
+
+
+@mcp.tool()
+async def peer_wait(timeout: int = 60) -> str:
+    """Long-Poll: wartet bis Nachrichten eintreffen oder Timeout greift.
+
+    Returnt sofort sobald eine Nachricht ankommt (~0ms Latenz statt
+    Polling-Lag). Ideal für aktive Abstimmungen zwischen Peers, weil
+    keine 2s-Polling-Schleife mehr nötig ist.
+
+    Args:
+        timeout: Maximale Wartezeit in Sekunden (Standard: 60)
+    """
+    return await tools.peer_wait(timeout)
 
 
 @mcp.tool()

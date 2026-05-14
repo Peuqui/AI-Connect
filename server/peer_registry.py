@@ -43,24 +43,18 @@ class PeerRegistry:
     ) -> Peer:
         """Registriert einen neuen Peer.
 
-        Der vollständige Name ist: "Maschinenname (Projekt)"
-        z.B. "Aragon (AIfred-Intelligence)" oder "mini (AI-Connect)"
+        Der Name kommt bereits im Format "Host:Projekt" vom Client
+        (z.B. "Mini:AIfred-Intelligence", "Aragon:FreeEchoDot2") und
+        wird unverändert übernommen. Das project-Feld wird nur am
+        Peer-Objekt gespeichert (für Filterung/Suche).
 
-        Wenn bereits ein Peer mit gleichem vollständigen Namen existiert:
+        Wenn bereits ein Peer mit gleichem Namen existiert:
         - Alte Verbindung wird geschlossen, neue übernimmt
 
         Returns:
             Der registrierte Peer
         """
-        # Vollständigen Namen bauen: "Maschinenname (Projekt)"
-        if project:
-            full_name = f"{name} ({project})"
-        else:
-            full_name = name
-
-        # Observer-Namen direkt durchlassen
-        if name.startswith("_") and name.endswith("_"):
-            full_name = name
+        full_name = name
 
         # Duplikat-Check: Alte Verbindung ersetzen wenn Name bereits existiert
         if full_name in self._peers:
@@ -93,28 +87,17 @@ class PeerRegistry:
             await self._on_leave(peer)
 
     def get(self, name: str) -> Optional[Peer]:
-        """Holt einen Peer nach Name.
+        """Holt einen Peer nach exaktem Namen.
 
-        Unterstützt:
-        - Exakte Matches: "mini (mp)" findet "mini (mp)"
-        - Partielle Matches: "mini" findet "mini (mp)" wenn eindeutig
+        Names sind im Format "Host:Projekt" und müssen vollständig
+        angegeben werden (z.B. "Mini:AIfred-Intelligence").
         """
-        # Erst exakten Match versuchen
-        if name in self._peers:
-            return self._peers[name]
-
-        # Dann partiellen Match: Name beginnt mit dem Suchbegriff
-        matches = [p for p in self._peers.values() if p.name.startswith(name + " (")]
-        if len(matches) == 1:
-            return matches[0]
-
-        # Kein oder mehrdeutiger Match
-        return None
+        return self._peers.get(name)
 
     def get_all(self) -> list[dict]:
         """Gibt alle Peers als Liste zurück.
 
-        Der Name enthält bereits das Projekt: "Aragon (AIfred-Intelligence)"
+        Der Name hat Format "Host:Projekt", z.B. "Mini:AIfred-Intelligence".
         """
         return [
             {
