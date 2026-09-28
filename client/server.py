@@ -121,6 +121,11 @@ async def peer_read() -> str:
 
     Gibt alle Nachrichten zurück die seit dem letzten Aufruf
     eingegangen sind und markiert sie als gelesen.
+
+    Eingehende Nachrichten wecken die Sitzung nicht. Wer auf eine Antwort
+    wartet, startet den Wächter als Hintergrundaufgabe:
+    python3 ~/Projekte/AI-Connect/integrations/claude-code/aiconnect_watch.py
+    Er endet bei der nächsten Nachricht an diesen Peer; danach peer_read.
     """
     return await tools.peer_read()
 
@@ -129,9 +134,12 @@ async def peer_read() -> str:
 async def peer_wait(timeout: int = 60) -> str:
     """Long-Poll: wartet bis Nachrichten eintreffen oder Timeout greift.
 
-    Returnt sofort sobald eine Nachricht ankommt (~0ms Latenz statt
-    Polling-Lag). Ideal für aktive Abstimmungen zwischen Peers, weil
-    keine 2s-Polling-Schleife mehr nötig ist.
+    Returnt sofort sobald eine Nachricht ankommt. Blockiert aber die eigene
+    Runde: währenddessen keine Reaktion auf den User. Für Absprachen, bei
+    denen nebenher weitergearbeitet wird, stattdessen den Wächter als
+    Hintergrundaufgabe starten (siehe peer_read); peer_wait nur, wenn es
+    sonst nichts zu tun gibt (z. B. /beratung). Nicht in einer Schleife
+    aus einem Hilfsagenten aufrufen, das kostet pro Runde Tokens.
 
     Args:
         timeout: Maximale Wartezeit in Sekunden (Standard: 60)

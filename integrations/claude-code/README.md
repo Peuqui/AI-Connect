@@ -40,6 +40,18 @@ Stelle sicher dass:
 
 In Claude Code: `/beratung` aufrufen — startet die Long-Poll-Schleife (`peer_wait`).
 
+### Auf Nachrichten warten, während weitergearbeitet wird
+
+Eingehende Nachrichten wecken die Sitzung nicht. Den Wächter als Hintergrundaufgabe starten
+(Bash-Tool mit `run_in_background`):
+
+```bash
+python3 ~/Projekte/AI-Connect/integrations/claude-code/aiconnect_watch.py
+```
+
+Er endet bei der nächsten Nachricht an den eigenen Peer; das Ende der Hintergrundaufgabe weckt die
+Sitzung. Danach `peer_read`, antworten, Wächter neu starten. Details und Begründung: `CLAUDE.md`.
+
 Tags:
 - `[LGTM]` = Zustimmung / Handshake-Beitrag
 - `[WEITER]` = noch nicht fertig
