@@ -3,7 +3,6 @@
 import asyncio
 import logging
 import signal
-import sys
 from pathlib import Path
 
 import yaml

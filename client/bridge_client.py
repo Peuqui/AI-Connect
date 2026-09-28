@@ -218,8 +218,11 @@ class BridgeClient:
 
     async def _receive_loop(self) -> None:
         """Empfängt und verarbeitet eingehende Nachrichten."""
+        ws = self._ws
+        if ws is None:
+            return
         try:
-            async for raw in self._ws:
+            async for raw in ws:
                 try:
                     data = json.loads(raw)
                     msg_type = data.get("type")
@@ -241,6 +244,11 @@ class BridgeClient:
 
                     elif msg_type == "peer_joined":
                         peer = data.get("peer", {})
+                        # Neuanmeldung ersetzt einen Peer ohne peer_left,
+                        # daher ein Eintrag pro Name.
+                        self._peers = [
+                            p for p in self._peers if p.get("name") != peer.get("name")
+                        ]
                         self._peers.append(peer)
                         logger.info(f"Peer beigetreten: {peer.get('name')}")
 
@@ -256,6 +264,15 @@ class BridgeClient:
                             logger.info(f"Server hat Namen zugewiesen: {assigned_name} (angefragt: {self.peer_name})")
                             self.peer_name = assigned_name
 
+                    elif msg_type == "replaced":
+                        # Eine andere Sitzung hat unseren Namen übernommen;
+                        # ein Reconnect würde sie nur wieder verdrängen.
+                        logger.warning(
+                            f"Peer-Name '{self.peer_name}' von einer anderen "
+                            "Sitzung übernommen, kein Auto-Reconnect"
+                        )
+                        self._should_reconnect = False
+
                     elif msg_type == "pong":
                         pass  # Heartbeat-Antwort
 
@@ -263,11 +280,14 @@ class BridgeClient:
                     logger.warning("Ungültige JSON-Nachricht empfangen")
 
         except websockets.exceptions.ConnectionClosed:
-            logger.warning("Verbindung zum Bridge Server verloren")
-            self._connected = False
-            self._ws = None
-            if self._should_reconnect and not self._reconnecting:
-                asyncio.create_task(self._reconnect())
+            pass
+        # Ein sauberes Schließen durch den Server beendet die Schleife ohne
+        # Exception, daher wird der Zustand hier für beide Fälle zurückgesetzt.
+        logger.warning("Verbindung zum Bridge Server verloren")
+        self._connected = False
+        self._ws = None
+        if self._should_reconnect and not self._reconnecting:
+            asyncio.create_task(self._reconnect())
 
     async def _ping_loop(self) -> None:
         """Sendet regelmäßig Pings."""
@@ -282,7 +302,7 @@ class BridgeClient:
             return  # Bereits ein Reconnect aktiv
 
         self._reconnecting = True
-        delay = 2  # Start mit 2 Sekunden
+        delay: float = 2  # Start mit 2 Sekunden
         max_delay = 30  # Maximal 30 Sekunden warten
         attempt = 0
 

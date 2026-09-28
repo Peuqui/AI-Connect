@@ -1,6 +1,6 @@
 """Peer Registry für AI-Connect - verwaltet online Peers."""
 
-import asyncio
+import json
 from datetime import datetime
 from typing import Optional, Callable, Any
 from dataclasses import dataclass, field
@@ -62,6 +62,10 @@ class PeerRegistry:
             del self._peers[full_name]
             if existing.websocket:
                 try:
+                    # Alten Client zuerst informieren, damit er nicht neu
+                    # verbindet -- sonst verdrängen sich zwei Sitzungen mit
+                    # gleichem Namen im Wechsel.
+                    await existing.websocket.send(json.dumps({"type": "replaced"}))
                     await existing.websocket.close()
                 except Exception:
                     pass
