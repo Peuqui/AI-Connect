@@ -36,7 +36,8 @@ MCP-based communication bridge between AI coding assistants across different mac
 - **Salomo Principle**: Multi-agent consensus for better decisions (AIfred/Sokrates/Salomo)
 - **SSE Transport**: Stable HTTP/SSE connection instead of STDIO
 - **Offline Messages**: Messages are stored until the recipient comes online
-- **Project-based Peer Names**: e.g., "Aragon (myproject)" or "mini (AI-Connect)"
+- **Project-based Peer Names**: `Host:Project`, e.g. `Mini:AIfred-Intelligence` or `Aragon:FreeEchoDot2`
+- **Message watcher**: a background task that wakes a Claude Code session when a message arrives, without polling
 
 > **Note:** This is an early/rough implementation. It works, but has limitations - see [Current Limitations](#current-limitations) below.
 
@@ -250,7 +251,7 @@ After configuration, restart VS Code / Claude Code to load the MCP Client.
 | `peer_list` | Shows all online peers |
 | `peer_send` | Sends message to peer (or `*` for broadcast) |
 | `peer_read` | Reads received messages |
-| `peer_wait` | Waits for new message (with timeout) |
+| `peer_wait` | Waits for new message (with timeout); blocks the own turn, see [Waiting for messages](#waiting-for-messages) |
 | `peer_history` | Shows chat history with peer |
 | `peer_context` | Shares file context with other peers |
 | `peer_status` | Shows connection status to Bridge Server |
@@ -293,9 +294,10 @@ AI-Connect/
 │   ├── bridge_client.py    # Persistent WebSocket connection
 │   └── tools.py            # MCP Tools implementation
 │
-├── skills/                 # Claude Code Skills
-│   └── advisor/            # Advisor mode skill
-│       └── SKILL.md
+├── integrations/claude-code/
+│   ├── CLAUDE.md           # Rules for Claude Code (import via @ in ~/.claude/CLAUDE.md)
+│   ├── aiconnect_watch.py  # Message watcher (background task)
+│   └── commands/beratung.md # /beratung slash command (long-poll advisor loop)
 │
 └── config.yaml             # Example configuration
 ```
@@ -303,8 +305,8 @@ AI-Connect/
 ### Key Details
 
 - **SSE Transport**: The MCP HTTP Server uses Server-Sent Events (SSE) for stable connections to VSCode/Claude Code.
-- **Project-based Peer Names**: Peers are registered as `Name (Project)`, e.g., "Aragon (myproject)" or "mini (AI-Connect)".
-- **Unique Client IDs**: With multiple instances, the PID is appended, e.g., "Aragon#12345 (myproject)".
+- **Project-based Peer Names**: The STDIO client registers as `Host:Project` (hostname and name of the working directory), e.g. `Mini:AIfred-Intelligence`. `AI_CONNECT_PEER_NAME` overrides it. The HTTP/SSE server uses `peer.name` from the config.
+- **One session per name**: When a second session registers under a name that is already online, the newer one takes over. The Bridge sends the older one `{"type": "replaced"}` and closes it; that client does not reconnect, so the two do not keep pushing each other out. Two Claude Code sessions in the same project directory share a name; close one or set `AI_CONNECT_PEER_NAME`.
 - **Offline Messages**: When a peer is offline, the Bridge Server stores messages in SQLite and delivers them when the peer comes back online.
 - **Heartbeat**: Client sends ping every 25 seconds, server removes inactive peers after 60 seconds.
 
@@ -335,17 +337,19 @@ AI-Connect enables the **Salomo Principle** for better decisions through multi-a
 - **Unanimous (3/3)** for critical architecture changes
 - **Tags:** `[LGTM]` = approval, `[CONTINUE]` = not finished yet
 
-### `/advisor` Skill
+### `/beratung` Command
 
-The skill `skills/advisor/SKILL.md` activates advisor mode:
+The slash command `integrations/claude-code/commands/beratung.md` starts advisor mode; see [integrations/claude-code/README.md](integrations/claude-code/README.md) for installation. The instance waits for messages with `peer_wait` (long-poll, returns as soon as a message arrives). **Important:** All sent and received messages are displayed to the user - you can read the full conversation between the AI instances.
+
+### Waiting for Messages
+
+Incoming messages do not wake a Claude Code session. While an agreement with another peer is open and the session keeps working, start the watcher as a background task (Bash tool with `run_in_background`):
 
 ```bash
-# Install skill in Claude Code
-mkdir -p ~/.claude/skills/advisor
-cp skills/advisor/SKILL.md ~/.claude/skills/advisor/
+python3 ~/Projekte/AI-Connect/integrations/claude-code/aiconnect_watch.py
 ```
 
-Then activate advisor mode with `/advisor`. The Claude instance enters a polling loop, checking for incoming messages every 2 seconds. **Important:** All sent and received messages are displayed to the user - you can read the full conversation between the AI instances.
+It reads the Bridge's `messages.db` read-only every 5 seconds and exits as soon as a new message for this peer (or `*`) arrives. The finished background task wakes the session, which then calls `peer_read` and restarts the watcher. It never connects to the Bridge, so it cannot take over the peer name. `peer_wait` blocks the own turn (no reaction to the user meanwhile), so use it only when there is nothing else to do, as in `/beratung`; do not loop it from a helper agent, which costs tokens every round.
 
 ---
 
@@ -402,7 +406,7 @@ bridge:
   port: 9999             # Port of Bridge Server
 
 peer:
-  name: "dev"            # Unique name of this peer
+  name: "dev"            # Peer name of the HTTP/SSE server (the STDIO client uses Host:Project)
   auto_connect: true     # Auto-connect on start
 ```
 
@@ -410,7 +414,7 @@ peer:
 
 | Variable | Description |
 |----------|-------------|
-| `AI_CONNECT_PEER_NAME` | Overrides `peer.name` from config |
+| `AI_CONNECT_PEER_NAME` | Overrides the peer name (`peer.name` for the HTTP/SSE server, `Host:Project` for the STDIO client) |
 
 ---
 
@@ -418,17 +422,17 @@ peer:
 
 This is an early/rough implementation. It works, but is far from elegant:
 
-- **Polling required**: Claude Code has no external trigger mechanism. To receive messages, an instance must actively poll via `peer_read`. The `/advisor` skill does this with a 2-second loop - like a car burning fuel while idling. It works, but wastes tokens doing nothing useful.
+- **No wake-up on message**: Claude Code has no external trigger mechanism, so an incoming message does not wake a session. The [message watcher](#waiting-for-messages) works around this: as a background task it ends when a message arrives, and a finished background task does wake the session. Without it, an instance has to call `peer_read` or wait in `peer_wait`.
 
 - **No external triggers possible**: We thoroughly investigated Claude Code's [hooks system](https://code.claude.com/docs/en/hooks). The `UserPromptSubmit` hook can inject context, but only when the user sends a message - so you'd still need to type something for messages to arrive. There is simply no way to externally interrupt or signal a running Claude Code session. This is a fundamental limitation of the current Claude Code architecture.
 
-- **No push notifications**: When a message arrives, there's no way to notify a working Claude instance. The receiving instance must be idle and polling.
+- **No interrupt of a running turn**: The watcher wakes a session between turns. A turn that is already running is not interrupted; the message is picked up when it ends.
 
 - **Manual context sharing**: You need to explicitly use `peer_context` to share code. There's no automatic awareness of what other instances are working on.
 
 ### The Core Problem
 
-Until Claude Code (or Anthropic) implements external trigger/interrupt capabilities, true real-time multi-agent collaboration remains a workaround at best. The polling approach works, but it's not elegant - and it costs tokens for nothing.
+Until Claude Code (or Anthropic) implements external trigger/interrupt capabilities, true real-time multi-agent collaboration remains a workaround. The watcher removes the idle polling and its token cost, but a message still waits for the current turn to end.
 
 Pull requests welcome if you find a better approach!
 

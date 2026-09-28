@@ -36,7 +36,8 @@ MCP-basierte Kommunikationsbrücke zwischen KI-Coding-Assistenten auf verschiede
 - **Salomo-Prinzip**: Multi-Agent Konsens für bessere Entscheidungen (AIfred/Sokrates/Salomo)
 - **SSE Transport**: Stabile HTTP/SSE Verbindung statt STDIO
 - **Offline-Nachrichten**: Nachrichten werden gespeichert bis der Empfänger online ist
-- **Projekt-basierte Peer-Namen**: z.B. "Aragon (mp)" oder "mini (AI-Connect)"
+- **Projekt-basierte Peer-Namen**: `Host:Projekt`, z.B. `Mini:AIfred-Intelligence` oder `Aragon:FreeEchoDot2`
+- **Nachrichten-Wächter**: Hintergrundaufgabe, die eine Claude-Code-Sitzung bei einer neuen Nachricht weckt, ohne Polling
 
 > **Hinweis:** Dies ist eine frühe/raue Implementation. Sie funktioniert, hat aber Einschränkungen - siehe [Aktuelle Einschränkungen](#aktuelle-einschränkungen) unten.
 
@@ -254,7 +255,7 @@ Nach der Konfiguration VS Code / Claude Code neu starten, damit der MCP Client l
 | `peer_list` | Zeigt alle online Peers |
 | `peer_send` | Sendet Nachricht an Peer (oder `*` für Broadcast) |
 | `peer_read` | Liest empfangene Nachrichten |
-| `peer_wait` | Wartet auf neue Nachricht (mit Timeout) |
+| `peer_wait` | Wartet auf neue Nachricht (mit Timeout); blockiert die eigene Runde, siehe [Auf Nachrichten warten](#auf-nachrichten-warten) |
 | `peer_history` | Zeigt Chatverlauf mit Peer |
 | `peer_context` | Teilt Datei-Kontext mit anderen Peers |
 | `peer_status` | Zeigt Verbindungsstatus zum Bridge Server |
@@ -297,9 +298,10 @@ AI-Connect/
 │   ├── bridge_client.py    # Persistente WebSocket-Verbindung
 │   └── tools.py            # MCP Tools Implementation
 │
-├── skills/                 # Claude Code Skills
-│   └── advisor/            # Advisor-Modus Skill
-│       └── SKILL.md
+├── integrations/claude-code/
+│   ├── CLAUDE.md           # Regeln für Claude Code (per @ in ~/.claude/CLAUDE.md einbinden)
+│   ├── aiconnect_watch.py  # Nachrichten-Wächter (Hintergrundaufgabe)
+│   └── commands/beratung.md # /beratung Slash-Befehl (Long-Poll-Beraterschleife)
 │
 └── config.yaml             # Beispiel-Konfiguration
 ```
@@ -307,8 +309,8 @@ AI-Connect/
 ### Wichtige Details
 
 - **SSE Transport**: Der MCP HTTP Server verwendet Server-Sent Events (SSE) für stabile Verbindungen zu VSCode/Claude Code.
-- **Projekt-basierte Peer-Namen**: Peers werden als `Name (Projekt)` registriert, z.B. "Aragon (mp)" oder "mini (AI-Connect)".
-- **Eindeutige Client-IDs**: Bei mehreren Instanzen wird die PID angehängt, z.B. "Aragon#12345 (mp)".
+- **Projekt-basierte Peer-Namen**: Der STDIO-Client meldet sich als `Host:Projekt` an (Hostname und Name des Arbeitsverzeichnisses), z.B. `Mini:AIfred-Intelligence`. `AI_CONNECT_PEER_NAME` überschreibt das. Der HTTP/SSE-Server nutzt `peer.name` aus der Config.
+- **Eine Sitzung pro Name**: Meldet sich eine zweite Sitzung unter einem Namen an, der schon online ist, übernimmt die neuere. Die Bridge schickt der älteren `{"type": "replaced"}` und schließt sie; dieser Client verbindet sich nicht neu, damit sich die beiden nicht gegenseitig verdrängen. Zwei Claude-Code-Sitzungen im selben Projektverzeichnis tragen denselben Namen; eine schließen oder `AI_CONNECT_PEER_NAME` setzen.
 - **Offline-Nachrichten**: Wenn ein Peer offline ist, speichert der Bridge Server die Nachrichten in SQLite und stellt sie zu, sobald der Peer wieder online kommt.
 - **Heartbeat**: Client sendet alle 25 Sekunden einen Ping, Server entfernt inaktive Peers nach 60 Sekunden.
 
@@ -339,17 +341,19 @@ AI-Connect ermöglicht das **Salomo-Prinzip** für bessere Entscheidungen durch 
 - **Unanimous (3/3)** für kritische Architektur-Änderungen
 - **Tags:** `[LGTM]` = Zustimmung, `[WEITER]` = noch nicht fertig
 
-### `/advisor` Skill
+### `/beratung` Befehl
 
-Der Skill `skills/advisor/SKILL.md` aktiviert den Advisor-Modus:
+Der Slash-Befehl `integrations/claude-code/commands/beratung.md` startet den Berater-Modus; Installation siehe [integrations/claude-code/README.md](integrations/claude-code/README.md). Die Instanz wartet mit `peer_wait` auf Nachrichten (Long-Poll, kehrt sofort zurück, sobald eine Nachricht eintrifft). **Wichtig:** Alle gesendeten und empfangenen Nachrichten werden dem User angezeigt - man kann die komplette Konversation zwischen den KI-Instanzen mitlesen.
+
+### Auf Nachrichten warten
+
+Eingehende Nachrichten wecken eine Claude-Code-Sitzung nicht. Solange eine Absprache mit einem anderen Peer offen ist und die Sitzung weiterarbeitet, den Wächter als Hintergrundaufgabe starten (Bash-Tool mit `run_in_background`):
 
 ```bash
-# Skill in Claude Code installieren
-mkdir -p ~/.claude/skills/advisor
-cp skills/advisor/SKILL.md ~/.claude/skills/advisor/
+python3 ~/Projekte/AI-Connect/integrations/claude-code/aiconnect_watch.py
 ```
 
-Dann mit `/advisor` den Advisor-Modus aktivieren. Die Claude-Instanz geht in eine Polling-Schleife und prüft alle 2 Sekunden auf eingehende Nachrichten. **Wichtig:** Alle gesendeten und empfangenen Nachrichten werden dem User angezeigt - man kann die komplette Konversation zwischen den KI-Instanzen mitlesen.
+Er liest alle 5 Sekunden nur lesend die `messages.db` der Bridge und beendet sich, sobald eine neue Nachricht an diesen Peer (oder `*`) eingeht. Das Ende der Hintergrundaufgabe weckt die Sitzung; danach `peer_read` und den Wächter neu starten. Er meldet sich nie an der Bridge an und kann den Peer-Namen daher nicht übernehmen. `peer_wait` blockiert die eigene Runde (keine Reaktion auf den User), also nur verwenden, wenn es sonst nichts zu tun gibt, wie in `/beratung`; nicht in einer Schleife aus einem Hilfsagenten, das kostet jede Runde Tokens.
 
 ---
 
@@ -406,7 +410,7 @@ bridge:
   port: 9999             # Port des Bridge Servers
 
 peer:
-  name: "dev"            # Eindeutiger Name dieses Peers
+  name: "dev"            # Peer-Name des HTTP/SSE-Servers (der STDIO-Client nutzt Host:Projekt)
   auto_connect: true     # Automatisch verbinden beim Start
 ```
 
@@ -414,7 +418,7 @@ peer:
 
 | Variable | Beschreibung |
 |----------|--------------|
-| `AI_CONNECT_PEER_NAME` | Überschreibt `peer.name` aus Config |
+| `AI_CONNECT_PEER_NAME` | Überschreibt den Peer-Namen (`peer.name` beim HTTP/SSE-Server, `Host:Projekt` beim STDIO-Client) |
 
 ---
 
@@ -422,16 +426,16 @@ peer:
 
 Dies ist eine frühe/raue Implementation. Sie funktioniert, ist aber weit davon entfernt, elegant zu sein:
 
-- **Polling erforderlich**: Claude Code hat keinen externen Trigger-Mechanismus. Um Nachrichten zu empfangen, muss eine Instanz aktiv via `peer_read` pollen. Der `/advisor` Skill macht das mit einer 2-Sekunden-Schleife - wie ein Auto das im Leerlauf Benzin verbrennt. Es funktioniert, aber es verschwendet Tokens für nichts.
+- **Kein Wecken bei Nachricht**: Claude Code hat keinen externen Trigger-Mechanismus, eine eingehende Nachricht weckt also keine Sitzung. Der [Nachrichten-Wächter](#auf-nachrichten-warten) umgeht das: Als Hintergrundaufgabe endet er bei einer Nachricht, und eine beendete Hintergrundaufgabe weckt die Sitzung. Ohne ihn muss eine Instanz `peer_read` aufrufen oder in `peer_wait` warten.
 
 - **Keine externen Trigger möglich**: Wir haben Claude Codes [Hook-System](https://code.claude.com/docs/en/hooks) gründlich untersucht. Der `UserPromptSubmit` Hook kann Kontext injizieren, aber nur wenn der User eine Nachricht schickt - man müsste also trotzdem etwas tippen damit Nachrichten ankommen. Es gibt schlicht keine Möglichkeit, eine laufende Claude Code Session von außen zu unterbrechen oder zu signalisieren. Das ist eine fundamentale Einschränkung der aktuellen Claude Code Architektur.
 
-- **Keine Push-Benachrichtigungen**: Wenn eine Nachricht ankommt, gibt es keine Möglichkeit, eine arbeitende Claude-Instanz zu benachrichtigen. Die empfangende Instanz muss idle sein und pollen.
+- **Kein Unterbrechen einer laufenden Runde**: Der Wächter weckt eine Sitzung zwischen zwei Runden. Eine bereits laufende Runde wird nicht unterbrochen; die Nachricht wird aufgegriffen, wenn sie endet.
 
 - **Manuelles Context-Sharing**: Man muss explizit `peer_context` verwenden um Code zu teilen. Es gibt kein automatisches Bewusstsein darüber, woran andere Instanzen arbeiten.
 
 ### Das Kernproblem
 
-Bis Claude Code (oder Anthropic) externe Trigger/Interrupt-Fähigkeiten implementiert, bleibt echte Echtzeit-Multi-Agent-Kollaboration bestenfalls ein Workaround. Der Polling-Ansatz funktioniert, aber er ist nicht elegant - und kostet Tokens für nichts.
+Bis Claude Code (oder Anthropic) externe Trigger/Interrupt-Fähigkeiten implementiert, bleibt echte Echtzeit-Multi-Agent-Kollaboration ein Workaround. Der Wächter beseitigt das Leerlauf-Polling und seine Tokenkosten, eine Nachricht wartet aber weiterhin, bis die laufende Runde endet.
 
 Pull Requests willkommen, falls jemand einen besseren Ansatz findet!
