@@ -4,7 +4,6 @@ Läuft als persistenter Service und bietet stabile WebSocket-Verbindung
 zum Bridge Server. VS Code verbindet sich per HTTP/SSE.
 """
 
-import asyncio
 import logging
 import os
 import sys
@@ -19,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 import yaml
 from fastmcp import FastMCP
 
-from bridge_client import BridgeClient, get_client, init_client
+from bridge_client import get_client, init_client
 
 # Log-Verzeichnis erstellen
 log_dir = Path.home() / ".config" / "ai-connect"
@@ -100,7 +99,7 @@ def format_timestamp(ts: Optional[str] = None) -> str:
         try:
             dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
             return dt.strftime("%H:%M:%S.%f")[:-3]
-        except:
+        except ValueError:
             pass
     return datetime.now().strftime("%H:%M:%S.%f")[:-3]
 

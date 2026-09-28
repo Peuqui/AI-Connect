@@ -35,6 +35,12 @@ class MessageStore:
         """)
         await self._db.commit()
 
+    @property
+    def _conn(self) -> aiosqlite.Connection:
+        if self._db is None:
+            raise RuntimeError("MessageStore nicht verbunden, zuerst connect() aufrufen")
+        return self._db
+
     async def close(self) -> None:
         """Schließt die Datenbankverbindung."""
         if self._db:
@@ -54,19 +60,19 @@ class MessageStore:
         timestamp = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
         context_json = json.dumps(context) if context else None
 
-        await self._db.execute(
+        await self._conn.execute(
             """
             INSERT INTO messages (id, from_peer, to_peer, content, context, timestamp)
             VALUES (?, ?, ?, ?, ?, ?)
             """,
             (msg_id, from_peer, to_peer, content, context_json, timestamp)
         )
-        await self._db.commit()
+        await self._conn.commit()
         return msg_id
 
     async def get_unread(self, peer: str) -> list[dict]:
         """Holt alle ungelesenen Nachrichten für einen Peer."""
-        cursor = await self._db.execute(
+        cursor = await self._conn.execute(
             """
             SELECT id, from_peer, to_peer, content, context, timestamp
             FROM messages
@@ -95,11 +101,11 @@ class MessageStore:
         if not message_ids:
             return
         placeholders = ",".join("?" * len(message_ids))
-        await self._db.execute(
+        await self._conn.execute(
             f"UPDATE messages SET delivered = 1 WHERE id IN ({placeholders})",
             message_ids
         )
-        await self._db.commit()
+        await self._conn.commit()
 
     async def get_history(
         self,
@@ -108,7 +114,7 @@ class MessageStore:
         limit: int = 50
     ) -> list[dict]:
         """Holt den Chatverlauf zwischen zwei Peers."""
-        cursor = await self._db.execute(
+        cursor = await self._conn.execute(
             """
             SELECT id, from_peer, to_peer, content, context, timestamp
             FROM messages

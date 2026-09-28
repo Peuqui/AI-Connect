@@ -1,6 +1,5 @@
 """FastMCP Server für AI-Connect."""
 
-import asyncio
 import logging
 import os
 import socket
@@ -56,8 +55,8 @@ async def lifespan(app):
     peer = config.get("peer", {})
 
     # Peer-Name: "Hostname:Projekt" — hostübergreifend eindeutig.
-    # Server vergibt automatisch Suffix bei Kollision (name → name2 → name3).
-    # Override per ENV bleibt möglich.
+    # Bei gleichem Namen übernimmt die neuere Sitzung, die ältere bekommt
+    # "replaced" und verbindet sich nicht neu. Override per ENV bleibt möglich.
     hostname = socket.gethostname()
     project = Path.cwd().name
     peer_name = os.environ.get("AI_CONNECT_PEER_NAME", f"{hostname}:{project}")

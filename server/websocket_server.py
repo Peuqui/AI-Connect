@@ -6,7 +6,7 @@ import logging
 from typing import Optional
 
 import websockets
-from websockets.server import WebSocketServerProtocol
+from websockets.asyncio.server import Server, ServerConnection
 
 from .peer_registry import PeerRegistry
 from .message_store import MessageStore
@@ -22,7 +22,7 @@ class BridgeServer:
         self.port = port
         self.registry = PeerRegistry()
         self.store = MessageStore()
-        self._server = None
+        self._server: Optional[Server] = None
 
         self.registry.on_join(self._broadcast_peer_joined)
         self.registry.on_leave(self._broadcast_peer_left)
@@ -47,7 +47,7 @@ class BridgeServer:
             await self._server.wait_closed()
         await self.store.close()
 
-    async def _handle_connection(self, websocket: WebSocketServerProtocol) -> None:
+    async def _handle_connection(self, websocket: ServerConnection) -> None:
         """Verarbeitet eine neue WebSocket-Verbindung."""
         peer_name: Optional[str] = None
         client_ip = websocket.remote_address[0] if websocket.remote_address else "unknown"
@@ -91,7 +91,10 @@ class BridgeServer:
                         await websocket.send(json.dumps({"type": "pong"}))
 
                     elif msg_type == "message":
-                        await self._route_message(message, peer_name)
+                        if peer_name is None:
+                            await self._reject_unregistered(websocket, msg_type)
+                        else:
+                            await self._route_message(message, peer_name)
 
                     elif msg_type == "list_peers":
                         peers = self.registry.get_all()
@@ -101,7 +104,10 @@ class BridgeServer:
                         }))
 
                     elif msg_type == "history":
-                        other_peer = message.get("peer")
+                        if peer_name is None:
+                            await self._reject_unregistered(websocket, msg_type)
+                            continue
+                        other_peer = message.get("peer", "")
                         limit = message.get("limit", 50)
                         history = await self.store.get_history(peer_name, other_peer, limit)
                         await websocket.send(json.dumps({
@@ -123,9 +129,19 @@ class BridgeServer:
                 if current_peer and current_peer.websocket is websocket:
                     await self.registry.unregister(peer_name)
 
+    async def _reject_unregistered(self, websocket: ServerConnection, msg_type: str) -> None:
+        """Antwortet auf Anfragen, die eine Registrierung voraussetzen."""
+        await websocket.send(json.dumps({
+            "type": "error",
+            "error": f"'{msg_type}' erst nach 'register' möglich"
+        }))
+
     async def _route_message(self, message: dict, from_peer: str) -> None:
         """Routet eine Nachricht zum Ziel-Peer."""
         to_peer = message.get("to")
+        if not to_peer:
+            logger.warning(f"Nachricht von {from_peer} ohne Empfänger verworfen")
+            return
         content = message.get("content", "")
         context = message.get("context")
 
