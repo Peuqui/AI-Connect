@@ -353,7 +353,7 @@ Eingehende Nachrichten wecken eine Claude-Code-Sitzung nicht. Solange eine Abspr
 python3 ~/Projekte/AI-Connect/integrations/claude-code/aiconnect_watch.py
 ```
 
-Er liest alle 5 Sekunden nur lesend die `messages.db` der Bridge und beendet sich, sobald eine neue Nachricht an diesen Peer (oder `*`) eingeht. Das Ende der Hintergrundaufgabe weckt die Sitzung; danach `peer_read` und den Wächter neu starten. Er meldet sich nie an der Bridge an und kann den Peer-Namen daher nicht übernehmen. `peer_wait` blockiert die eigene Runde (keine Reaktion auf den User), also nur verwenden, wenn es sonst nichts zu tun gibt, wie in `/beratung`; nicht in einer Schleife aus einem Hilfsagenten, das kostet jede Runde Tokens.
+Den Peer-Namen liest er vom MCP-Client der eigenen Sitzung ab (nicht aus dem aktuellen Verzeichnis der Shell, das ein Worktree sein kann) und gibt ihn beim Start aus; ein Name als erstes Argument hat Vorrang. Er liest alle 5 Sekunden nur lesend die `messages.db` der Bridge und beendet sich, sobald eine neue Nachricht an diesen Peer (oder `*`) eingeht. Das Ende der Hintergrundaufgabe weckt die Sitzung; danach `peer_read` und den Wächter neu starten. Er meldet sich nie an der Bridge an und kann den Peer-Namen daher nicht übernehmen. `peer_wait` blockiert die eigene Runde (keine Reaktion auf den User), also nur verwenden, wenn es sonst nichts zu tun gibt, wie in `/beratung`; nicht in einer Schleife aus einem Hilfsagenten, das kostet jede Runde Tokens.
 
 ---
 

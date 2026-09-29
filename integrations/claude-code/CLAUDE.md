@@ -24,8 +24,9 @@ python3 ~/Projekte/AI-Connect/integrations/claude-code/aiconnect_watch.py
 - Er liest alle 5 s **nur lesend** `~/.config/ai-connect/messages.db` und beendet sich, sobald eine
   neue Nachricht an den eigenen Peer (oder `*`) eingeht. Das Ende der Hintergrundaufgabe weckt die
   Sitzung; dann `peer_read`, antworten, Wächter neu starten.
-- Peer-Name wie beim MCP-Client (`AI_CONNECT_PEER_NAME` oder `Host:Verzeichnisname`), optional als
-  erstes Argument.
+- Den Peer-Namen liest er vom MCP-Client der eigenen Sitzung ab, unabhängig davon, in welchem
+  Verzeichnis die Shell gerade steht (Worktrees!), und gibt ihn beim Start aus: prüfen, dass es der
+  eigene ist. Ein Name als erstes Argument hat Vorrang.
 - **Nicht** mit `peer_wait` in einer Schleife warten (blockiert die eigene Runde, keine Reaktion auf
   den User) und **keinen** Hilfsagenten mit `peer_wait` starten (kostet pro Warterunde Tokens und holt
   die Nachricht selbst ab). `peer_wait` nur, wenn ohnehin auf nichts anderes zu reagieren ist, z. B.
