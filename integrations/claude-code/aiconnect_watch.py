@@ -11,8 +11,9 @@ receives it, so this watches for rows newer than its own start, not for
 undelivered ones.
 
 Usage: aiconnect_watch.py [PEER_NAME]
-The peer name defaults to the one the MCP client uses: AI_CONNECT_PEER_NAME,
-or "<hostname>:<name of the current directory>".
+Without PEER_NAME it watches for the name the AI-Connect MCP client of this
+Claude Code session registered with (see session_peer_name), else for
+AI_CONNECT_PEER_NAME. It prints the name it watches for when it starts.
 """
 
 import os
@@ -26,13 +27,47 @@ from pathlib import Path
 DB = Path.home() / ".config" / "ai-connect" / "messages.db"
 POLL_SECONDS = 5
 
+
+
+def session_peer_name() -> str | None:
+    """The name the MCP client of this Claude Code session registered with.
+
+    Claude Code starts the MCP client (client/server.py) as its child; the
+    client names itself from AI_CONNECT_PEER_NAME or from its own start
+    directory, which never changes. The shell running this script may sit in
+    any directory (a worktree, another project), so its own directory proves
+    nothing: on 2026-09-29 a watcher started from a worktree listened for
+    "Mini:1Cat-vLLM-upstream" and missed every message.
+    """
+    claude_pid = os.environ.get("CLAUDE_PID")
+    if claude_pid is None:
+        return None
+    for children in Path(f"/proc/{claude_pid}/task").glob("*/children"):
+        for child in children.read_text().split():
+            args = Path(f"/proc/{child}/cmdline").read_bytes().split(b"\0")
+            if not any(arg.endswith(b"client/server.py") for arg in args):
+                continue
+            environ = Path(f"/proc/{child}/environ").read_bytes().split(b"\0")
+            for entry in environ:
+                if entry.startswith(b"AI_CONNECT_PEER_NAME="):
+                    return entry.split(b"=", 1)[1].decode()
+            directory = Path(os.readlink(f"/proc/{child}/cwd")).name
+            return f"{socket.gethostname()}:{directory}"
+    return None
+
+
 peer = (
     sys.argv[1]
     if len(sys.argv) > 1
-    else os.environ.get(
-        "AI_CONNECT_PEER_NAME", f"{socket.gethostname()}:{Path.cwd().name}"
-    )
+    else session_peer_name() or os.environ.get("AI_CONNECT_PEER_NAME")
 )
+if not peer:
+    sys.exit(
+        "aiconnect_watch.py: no peer name - pass it as the first argument, "
+        "run it inside a Claude Code session with the AI-Connect MCP client, "
+        "or set AI_CONNECT_PEER_NAME"
+    )
+print(f"watching for messages to {peer}", flush=True)
 start = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
 
 while True:

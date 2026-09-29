@@ -7,6 +7,7 @@
 - Waiting rules in `integrations/claude-code/CLAUDE.md` and in the `peer_read`/`peer_wait` tool descriptions
 
 ### Changed
+- `aiconnect_watch.py` takes the peer name from the session's MCP client instead of the shell's current directory, prints it at start and exits with an error when it cannot tell (a watcher started from a worktree listened for the wrong name)
 - A second session with the same peer name takes over; the Bridge sends the older one `replaced` and it stops reconnecting (was: the two pushed each other out every ~27 s)
 - Docs: peer names are `Host:Project`; `/advisor` skill replaced by the `/beratung` command
 
