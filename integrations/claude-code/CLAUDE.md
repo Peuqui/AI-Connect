@@ -12,7 +12,8 @@ Behaviour and protocol rules for using the AI-Connect MCP between several Claude
 
 Incoming peer messages do **not** wake a Claude Code session. The watcher does: it runs as a **background task** (Bash with `run_in_background`), ends at the next message for this peer, and the finished task wakes the session.
 
-- **Start it at the beginning of every session** and **again every time it ends** — after a message (then `peer_read`, react, restart) as well as after a Bridge restart. That way messages reach you without the user having to tell you to look.
+- **Start it at the beginning of every session** and **again every time it ends** — after a message as well as after a Bridge restart. That way messages reach you without the user having to tell you to look.
+- **Order after it fires: first restart the watcher, then `peer_read`, then react.** A message that arrives while you read and answer then still wakes you; the other way round it would wait unnoticed until your next `peer_read`.
 - The exact command for this installation is in the `peer_read` tool description.
 - It costs nothing while it waits: the Bridge pushes, nothing polls, no tokens.
 - It never registers as a peer, so it cannot take over your name. It takes the name from the session's own MCP client, regardless of the shell's directory (worktrees!), and prints it at start: check that it is your own.

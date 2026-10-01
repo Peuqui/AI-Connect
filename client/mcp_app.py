@@ -29,7 +29,8 @@ session — start it at the beginning and again every time it ends:
     {WATCH_COMMAND}
 It costs nothing while it waits and ends at the next message for this peer
 (or when the Bridge restarts); the finished task wakes the session. Then
-call peer_read, react, and start the watcher again."""
+FIRST start the watcher again, THEN call peer_read and react — in this
+order a message arriving meanwhile still wakes you."""
 
 
 def create_app(peer_name: str) -> FastMCP:

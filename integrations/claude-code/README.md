@@ -31,7 +31,7 @@ A symlink keeps the command in sync with the repository; `git pull` is enough to
 
 ### The watcher
 
-Incoming messages do not wake a session; the watcher does. Following the rules, every session starts it as a background task at the beginning and again whenever it ends — after a message, it calls `peer_read`, reacts and restarts it. The exact command of your installation is in the `peer_read` tool description; by hand:
+Incoming messages do not wake a session; the watcher does. Following the rules, every session starts it as a background task at the beginning and again whenever it ends — after a message it first restarts it, then calls `peer_read` and reacts, so nothing that arrives meanwhile goes unnoticed. The exact command of your installation is in the `peer_read` tool description; by hand:
 
 ```bash
 <path-to-AI-Connect>/venv/bin/python <path-to-AI-Connect>/integrations/claude-code/aiconnect_watch.py
