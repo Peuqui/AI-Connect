@@ -8,13 +8,14 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 
-# Füge client-Verzeichnis zum Pfad hinzu für direkte Ausführung
+# Füge client- und Repo-Verzeichnis zum Pfad hinzu für direkte Ausführung
 sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import yaml
 from fastmcp import FastMCP
 
 from bridge_client import init_client, get_client
+from config_loader import load_config
 import tools
 
 # Log-Verzeichnis erstellen
@@ -27,24 +28,6 @@ logging.basicConfig(
     handlers=[logging.FileHandler(log_dir / "mcp.log")]
 )
 logger = logging.getLogger(__name__)
-
-
-CONFIG_PATH = Path.home() / ".config" / "ai-connect" / "config.yaml"
-
-
-def load_config() -> dict:
-    """Lädt die Konfiguration aus ~/.config/ai-connect/config.yaml.
-
-    Wirft FileNotFoundError wenn die Config fehlt — bewusst kein
-    Fallback auf hardcoded Defaults oder andere Pfade.
-    """
-    if not CONFIG_PATH.exists():
-        raise FileNotFoundError(
-            f"AI-Connect Config fehlt: {CONFIG_PATH}\n"
-            f"Lege sie nach config.yaml.example an."
-        )
-    with open(CONFIG_PATH) as f:
-        return yaml.safe_load(f)
 
 
 @asynccontextmanager

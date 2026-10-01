@@ -2,6 +2,8 @@
 
 MCP-based communication bridge between AI coding assistants across different machines.
 
+Works with any MCP-capable client (Claude Code, Claude Desktop, Cursor, VS Code, Codex CLI, …). Day-to-day use and testing so far: Claude Code, for which [integrations/claude-code/](integrations/claude-code/) adds a message watcher, the `/beratung` command and behaviour rules.
+
 [Deutsche Version / German Version](README_DE.md)
 
 ## Overview
@@ -34,7 +36,7 @@ MCP-based communication bridge between AI coding assistants across different mac
 
 - **Multi-Agent Communication**: AI assistants can exchange messages across machines
 - **Salomo Principle**: Multi-agent consensus for better decisions (AIfred/Sokrates/Salomo)
-- **SSE Transport**: Stable HTTP/SSE connection instead of STDIO
+- **Two transports**: STDIO per session (Claude Code, one peer per project) or a shared HTTP/SSE server for any other MCP client
 - **Offline Messages**: Messages are stored until the recipient comes online
 - **Project-based Peer Names**: `Host:Project`, e.g. `Mini:AIfred-Intelligence` or `Aragon:FreeEchoDot2`
 - **Message watcher**: a background task that wakes a Claude Code session when a message arrives, without polling
@@ -95,115 +97,43 @@ AI-Connect fills this gap. It's simple, network-capable, and works. But it comes
 
 ---
 
-## Quick Setup: Bridge Server
+## Setup
 
-The Bridge Server runs on a dedicated machine (e.g., Mini-PC, Raspberry Pi, home server) and accepts connections from all clients.
+**Requirements:** Linux with systemd, Python 3.10+, git, sudo (for the services). One machine runs the Bridge Server; every machine whose AI assistant should talk to the others gets the MCP client. The Bridge machine can be one of them.
+
+### 1. Bridge Server (one machine, e.g. a home server or Raspberry Pi)
 
 ```bash
-# 1. Clone the project
-cd ~/projects
-git clone git@github.com:Peuqui/AI-Connect.git
+git clone https://github.com/Peuqui/AI-Connect.git
 cd AI-Connect
-
-# 2. Create virtual environment and install dependencies
-python3 -m venv venv
-source venv/bin/activate
-pip install fastmcp websockets aiosqlite pyyaml
-
-# 3. Set up Bridge Server as systemd service
-sudo tee /etc/systemd/system/ai-connect.service << 'EOF'
-[Unit]
-Description=AI-Connect Bridge Server
-After=network.target
-
-[Service]
-Type=simple
-User=YOUR_USERNAME
-WorkingDirectory=/path/to/AI-Connect
-ExecStart=/path/to/AI-Connect/venv/bin/python -m server.main
-Restart=always
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-# 4. Enable and start the service
-sudo systemctl daemon-reload
-sudo systemctl enable ai-connect
-sudo systemctl start ai-connect
-
-# 5. Check status
-sudo systemctl status ai-connect
+./install.sh --server
 ```
 
----
+The script creates a venv, installs `requirements.txt`, writes `~/.config/ai-connect/config.yaml`, and installs and starts `ai-connect.service` (Bridge, port 9999) and `ai-connect-mcp.service` (MCP over HTTP/SSE, port 9998). Clients on other machines must be able to reach port 9999.
 
-## Quick Setup: MCP Client (each machine)
-
-Every machine that should communicate via the bridge needs the MCP Client.
-
-### 1. Clone project and install dependencies
+### 2. MCP client (every other machine)
 
 ```bash
-cd ~/projects
-git clone git@github.com:Peuqui/AI-Connect.git
+git clone https://github.com/Peuqui/AI-Connect.git
 cd AI-Connect
-
-python3 -m venv venv
-source venv/bin/activate
-pip install fastmcp websockets aiosqlite pyyaml
+./install.sh --client
 ```
 
-### 2. Create config
+It asks for the Bridge machine's IP or hostname and installs `ai-connect-mcp.service`.
 
-**IMPORTANT**: `host` must be the IP of the Bridge Server, NOT `0.0.0.0`!
+`./install.sh --status`, `--update` and `--uninstall` work on both.
+
+### 3. Register the MCP server in your AI assistant
+
+**Claude Code (recommended):** register the STDIO client, so each session joins under its own name `Host:Project`:
 
 ```bash
-mkdir -p ~/.config/ai-connect
-cat > ~/.config/ai-connect/config.yaml << 'EOF'
-bridge:
-  host: "192.168.0.252"  # IP of the Bridge Server
-  port: 9999
-
-peer:
-  name: "YOUR_PEER_NAME"  # e.g., "dev", "mini", "laptop"
-  auto_connect: true
-EOF
+claude mcp add -s user ai-connect -- "$PWD/venv/bin/python" "$PWD/client/server.py"
 ```
 
-### 3. Set up MCP HTTP Server as service
+Run it in the AI-Connect directory. For the message watcher, the `/beratung` command and the behaviour rules, see [integrations/claude-code/README.md](integrations/claude-code/README.md).
 
-```bash
-# Create systemd user service
-mkdir -p ~/.config/systemd/user
-
-cat > ~/.config/systemd/user/ai-connect-mcp.service << 'EOF'
-[Unit]
-Description=AI-Connect MCP HTTP Server
-After=network.target
-
-[Service]
-Type=simple
-WorkingDirectory=/path/to/AI-Connect
-ExecStart=/path/to/AI-Connect/venv/bin/python -m client.http_server
-Restart=always
-RestartSec=5
-Environment=PYTHONUNBUFFERED=1
-
-[Install]
-WantedBy=default.target
-EOF
-
-# Enable and start the service
-systemctl --user daemon-reload
-systemctl --user enable ai-connect-mcp.service
-systemctl --user start ai-connect-mcp.service
-```
-
-### 4. Register MCP Server in VSCode/Claude Code
-
-Create/edit `~/.vscode-server/data/User/mcp.json` (or `~/.config/Code/User/mcp.json`):
+**Other MCP clients** (VS Code, Cursor, Claude Desktop, …) connect to the HTTP/SSE server, which joins under `peer.name` from the config. In VS Code, `~/.config/Code/User/mcp.json` (remote: `~/.vscode-server/data/User/mcp.json`):
 
 ```json
 {
@@ -216,7 +146,7 @@ Create/edit `~/.vscode-server/data/User/mcp.json` (or `~/.config/Code/User/mcp.j
 }
 ```
 
-### 5. Claude Code Permissions (optional)
+### 4. Claude Code permissions (optional)
 
 To skip tool confirmation dialogs, add to `~/.claude/settings.json`:
 
@@ -236,9 +166,7 @@ To skip tool confirmation dialogs, add to `~/.claude/settings.json`:
 }
 ```
 
-### 6. Restart Claude Code
-
-After configuration, restart VS Code / Claude Code to load the MCP Client.
+Then restart the assistant so it loads the MCP server.
 
 ---
 
@@ -290,7 +218,7 @@ AI-Connect/
 │
 ├── client/                 # MCP Client (runs on each machine)
 │   ├── http_server.py      # FastMCP HTTP/SSE Server
-│   ├── server.py           # FastMCP STDIO Server (alternative)
+│   ├── server.py           # FastMCP STDIO Server (Claude Code, one peer per session)
 │   ├── bridge_client.py    # Persistent WebSocket connection
 │   └── tools.py            # MCP Tools implementation
 │
@@ -299,7 +227,10 @@ AI-Connect/
 │   ├── aiconnect_watch.py  # Message watcher (background task)
 │   └── commands/beratung.md # /beratung slash command (long-poll advisor loop)
 │
-└── config.yaml             # Example configuration
+├── config_loader.py        # Reads ~/.config/ai-connect/config.yaml (all services)
+├── config.yaml.example     # Example configuration
+├── requirements.txt        # Python dependencies
+└── install.sh              # Sets up venv, config, systemd services
 ```
 
 ### Key Details
@@ -389,7 +320,7 @@ tail -f ~/.config/ai-connect/mcp.log
 
 | Problem | Cause | Solution |
 |---------|-------|----------|
-| "Not connected" | Wrong host config | `host` must be Bridge Server IP, not `0.0.0.0` |
+| "Not connected" | Wrong host config | On client machines `bridge.host` must be the Bridge machine's IP, not `0.0.0.0` |
 | Peers don't see each other | MCP Client not persistent | Update code (`git pull`), restart VS Code |
 | Connection refused | Bridge Server not running | `sudo systemctl start ai-connect` |
 | Timeout | Firewall blocking | Open port 9999 in firewall |
@@ -400,15 +331,9 @@ tail -f ~/.config/ai-connect/mcp.log
 
 ### ~/.config/ai-connect/config.yaml
 
-```yaml
-bridge:
-  host: "192.168.0.252"  # IP of Bridge Server (NOT 0.0.0.0!)
-  port: 9999             # Port of Bridge Server
+Written by `install.sh`; every key is required, and a missing file stops each service with a message. Annotated template: [config.yaml.example](config.yaml.example).
 
-peer:
-  name: "dev"            # Peer name of the HTTP/SSE server (the STDIO client uses Host:Project)
-  auto_connect: true     # Auto-connect on start
-```
+`bridge.host` means two things: on the Bridge machine the address it listens on (`0.0.0.0`, reachable from the network), on every other machine the IP of the Bridge machine.
 
 ### Environment Variables
 

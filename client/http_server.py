@@ -12,13 +12,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-# Füge client-Verzeichnis zum Pfad hinzu
+# Füge client- und Repo-Verzeichnis zum Pfad hinzu
 sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import yaml
 from fastmcp import FastMCP
 
 from bridge_client import get_client, init_client
+from config_loader import load_config
 
 # Log-Verzeichnis erstellen
 log_dir = Path.home() / ".config" / "ai-connect"
@@ -35,39 +36,16 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def load_config() -> dict:
-    """Lädt die Konfiguration."""
-    config_paths = [
-        Path.home() / ".config" / "ai-connect" / "config.yaml",
-        Path(__file__).parent.parent / "config.yaml",
-        Path("config.yaml"),
-    ]
-
-    for path in config_paths:
-        if path.exists():
-            with open(path) as f:
-                config = yaml.safe_load(f)
-                logger.info(f"Konfiguration geladen von: {path}")
-                return config
-
-    logger.warning("Keine Konfigurationsdatei gefunden, verwende Defaults")
-    return {
-        "bridge": {"host": "192.168.0.252", "port": 9999},
-        "peer": {"name": "default", "auto_connect": True},
-        "mcp": {"port": 9998}
-    }
-
-
 @asynccontextmanager
 async def lifespan(app):
     """Lifecycle manager - verbindet beim Start, trennt beim Ende."""
     config = load_config()
-    bridge = config.get("bridge", {})
-    peer = config.get("peer", {})
+    bridge = config["bridge"]
+    peer = config["peer"]
 
-    base_name = os.environ.get("AI_CONNECT_PEER_NAME", peer.get("name", "default"))
-    host = bridge.get("host", "192.168.0.252")
-    port = bridge.get("port", 9999)
+    base_name = os.environ.get("AI_CONNECT_PEER_NAME", peer["name"])
+    host = bridge["host"]
+    port = bridge["port"]
 
     if peer.get("auto_connect", True):
         try:
@@ -276,9 +254,9 @@ async def peer_status() -> str:
 def main() -> None:
     """Startet den HTTP MCP Server."""
     config = load_config()
-    mcp_config = config.get("mcp", {})
-    port = mcp_config.get("port", 9998)
-    host = mcp_config.get("host", "127.0.0.1")
+    mcp_config = config["mcp"]
+    port = mcp_config["port"]
+    host = mcp_config["host"]
 
     logger.info(f"Starte MCP HTTP Server auf {host}:{port}")
 

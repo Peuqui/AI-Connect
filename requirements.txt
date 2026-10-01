@@ -1,0 +1,4 @@
+fastmcp
+websockets
+aiosqlite
+pyyaml
