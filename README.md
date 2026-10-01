@@ -440,7 +440,9 @@ Pull requests welcome if you find a better approach!
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=Peuqui/AI-Connect&type=Date)](https://star-history.com/#Peuqui/AI-Connect&Date)
+![Star History](.github/traffic/star-history.svg)
+
+<sub>Collected by the repo itself: a daily workflow records the star count and renders the chart. GitHub restricted the stargazer API to repo admins on 2026-06-30, so external chart services now need a token with write access.</sub>
 
 ## License
 
