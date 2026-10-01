@@ -1,4 +1,4 @@
-"""WebSocket Server für AI-Connect Bridge."""
+"""WebSocket server of the AI-Connect Bridge: routes messages between peers."""
 
 import asyncio
 import json
@@ -8,47 +8,44 @@ from typing import Optional
 import websockets
 from websockets.asyncio.server import Server, ServerConnection
 
-from .peer_registry import PeerRegistry
 from .message_store import MessageStore
+from .peer_registry import Peer, PeerRegistry
 
 logger = logging.getLogger(__name__)
 
+HEARTBEAT_SECONDS = 60
+
 
 class BridgeServer:
-    """WebSocket Server der Nachrichten zwischen Peers routet."""
+    """Routes messages between peers and keeps them in the message store."""
 
-    def __init__(self, host: str = "0.0.0.0", port: int = 9999):
+    def __init__(self, host: str, port: int):
         self.host = host
         self.port = port
         self.registry = PeerRegistry()
         self.store = MessageStore()
         self._server: Optional[Server] = None
+        self._heartbeat_task: Optional[asyncio.Task] = None
 
-        self.registry.on_join(self._broadcast_peer_joined)
-        self.registry.on_leave(self._broadcast_peer_left)
+        self.registry.on_join(self._announce_joined)
+        self.registry.on_leave(self._announce_left)
 
     async def start(self) -> None:
-        """Startet den WebSocket Server."""
         await self.store.connect()
-        self._server = await websockets.serve(
-            self._handle_connection,
-            self.host,
-            self.port
-        )
-        logger.info(f"Bridge Server gestartet auf ws://{self.host}:{self.port}")
-
-        # Heartbeat-Cleanup Task starten
-        asyncio.create_task(self._heartbeat_loop())
+        self._server = await websockets.serve(self._handle_connection, self.host, self.port)
+        self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
+        logger.info(f"Bridge Server listening on ws://{self.host}:{self.port}")
 
     async def stop(self) -> None:
-        """Stoppt den Server."""
+        if self._heartbeat_task:
+            self._heartbeat_task.cancel()
         if self._server:
             self._server.close()
             await self._server.wait_closed()
         await self.store.close()
 
     async def _handle_connection(self, websocket: ServerConnection) -> None:
-        """Verarbeitet eine neue WebSocket-Verbindung."""
+        """Serve one peer connection until it closes."""
         peer_name: Optional[str] = None
         client_ip = websocket.remote_address[0] if websocket.remote_address else "unknown"
 
@@ -56,184 +53,126 @@ class BridgeServer:
             async for raw_message in websocket:
                 try:
                     message = json.loads(raw_message)
-                    msg_type = message.get("type")
-
-                    if msg_type == "register":
-                        requested_name = message.get("name")
-                        project = message.get("project")
-                        peer = await self.registry.register(requested_name, client_ip, websocket, project)
-                        peer_name = peer.name  # Kann von requested_name abweichen!
-
-                        # Zugewiesenen Namen an Client senden
-                        await websocket.send(json.dumps({
-                            "type": "registered",
-                            "name": peer_name,
-                            "requested": requested_name
-                        }))
-
-                        if peer_name != requested_name:
-                            logger.info(f"Peer registriert: {peer_name} (angefragt: {requested_name}) ({client_ip})")
-                        else:
-                            logger.info(f"Peer registriert: {peer_name} ({client_ip})")
-
-                        # Ungelesene Nachrichten senden
-                        unread = await self.store.get_unread(peer_name)
-                        if unread:
-                            await websocket.send(json.dumps({
-                                "type": "unread",
-                                "messages": unread
-                            }))
-                            await self.store.mark_delivered([m["id"] for m in unread])
-
-                    elif msg_type == "ping":
-                        if peer_name:
-                            self.registry.update_ping(peer_name)
-                        await websocket.send(json.dumps({"type": "pong"}))
-
-                    elif msg_type == "message":
-                        if peer_name is None:
-                            await self._reject_unregistered(websocket, msg_type)
-                        else:
-                            await self._route_message(message, peer_name)
-
-                    elif msg_type == "list_peers":
-                        peers = self.registry.get_all()
-                        await websocket.send(json.dumps({
-                            "type": "peer_list",
-                            "peers": peers
-                        }))
-
-                    elif msg_type == "history":
-                        if peer_name is None:
-                            await self._reject_unregistered(websocket, msg_type)
-                            continue
-                        other_peer = message.get("peer", "")
-                        limit = message.get("limit", 50)
-                        history = await self.store.get_history(peer_name, other_peer, limit)
-                        await websocket.send(json.dumps({
-                            "type": "history",
-                            "peer": other_peer,
-                            "messages": history
-                        }))
-
                 except json.JSONDecodeError:
-                    logger.warning(f"Ungültige JSON-Nachricht von {client_ip}")
+                    logger.warning(f"Invalid JSON from {client_ip}")
+                    continue
+                msg_type = message.get("type")
+
+                if msg_type == "register":
+                    name = message.get("name")
+                    if not name:
+                        await self._send_error(websocket, "'register' needs a 'name'")
+                        continue
+                    await self.registry.register(name, client_ip, websocket)
+                    peer_name = name
+                    await websocket.send(json.dumps({"type": "registered", "name": name}))
+                    logger.info(f"Peer registered: {name} ({client_ip})")
+
+                    unread = await self.store.get_unread(name)
+                    if unread:
+                        await websocket.send(json.dumps({"type": "unread", "messages": unread}))
+                        await self.store.mark_delivered([m["id"] for m in unread])
+
+                elif msg_type == "ping":
+                    if peer_name:
+                        self.registry.update_ping(peer_name)
+                    await websocket.send(json.dumps({"type": "pong"}))
+
+                elif msg_type == "list_peers":
+                    await websocket.send(json.dumps({
+                        "type": "peer_list",
+                        "peers": [
+                            {"name": p.name, "ip": p.ip, "connected_at": p.connected_at}
+                            for p in self.registry.all()
+                        ]
+                    }))
+
+                elif peer_name is None:
+                    await self._send_error(websocket, f"'{msg_type}' needs 'register' first")
+
+                elif msg_type == "message":
+                    await self._route_message(message, peer_name)
+
+                elif msg_type == "history":
+                    history = await self.store.get_history(
+                        peer_name, message.get("peer", ""), message.get("limit", 50)
+                    )
+                    await websocket.send(json.dumps({
+                        "type": "history",
+                        "peer": message.get("peer", ""),
+                        "messages": history
+                    }))
 
         except websockets.exceptions.ConnectionClosed:
-            logger.info(f"Verbindung geschlossen: {peer_name or client_ip}")
+            pass
         finally:
+            logger.info(f"Connection closed: {peer_name or client_ip}")
+            # Only remove the peer if this connection is still the active one;
+            # after a takeover the name belongs to the new connection.
             if peer_name:
-                # Nur entfernen wenn dieser WebSocket noch der aktive ist
-                # (verhindert Löschen nach Ersetzung durch neue Verbindung)
-                current_peer = self.registry.get(peer_name)
-                if current_peer and current_peer.websocket is websocket:
+                current = self.registry.get(peer_name)
+                if current and current.websocket is websocket:
                     await self.registry.unregister(peer_name)
 
-    async def _reject_unregistered(self, websocket: ServerConnection, msg_type: str) -> None:
-        """Antwortet auf Anfragen, die eine Registrierung voraussetzen."""
-        await websocket.send(json.dumps({
-            "type": "error",
-            "error": f"'{msg_type}' erst nach 'register' möglich"
-        }))
+    async def _send_error(self, websocket: ServerConnection, error: str) -> None:
+        await websocket.send(json.dumps({"type": "error", "error": error}))
 
     async def _route_message(self, message: dict, from_peer: str) -> None:
-        """Routet eine Nachricht zum Ziel-Peer."""
+        """Deliver a message; direct messages to offline peers wait in the store.
+
+        A broadcast ("*") reaches the peers online right now. Waiting for
+        offline peers would need delivery tracking per recipient, and a
+        broadcast is about the present ("is anyone using GPU 2?").
+        """
         to_peer = message.get("to")
         if not to_peer:
-            logger.warning(f"Nachricht von {from_peer} ohne Empfänger verworfen")
+            logger.warning(f"Message from {from_peer} without recipient dropped")
             return
-        content = message.get("content", "")
-        context = message.get("context")
-
-        # Nachricht speichern
-        msg_id = await self.store.store(from_peer, to_peer, content, context)
-
-        # Nachricht für Übertragung vorbereiten
-        outgoing = {
-            "type": "message",
-            "id": msg_id,
-            "from": from_peer,
-            "to": to_peer,
-            "content": content,
-            "context": context
-        }
 
         if to_peer == "*":
-            # Broadcast an alle außer Sender
-            for peer in self.registry.get_all():
-                if peer["name"] != from_peer:
-                    target = self.registry.get(peer["name"])
-                    if target and target.websocket:
-                        try:
-                            await target.websocket.send(json.dumps(outgoing))
-                            await self.store.mark_delivered([msg_id])
-                        except Exception as e:
-                            logger.warning(f"Fehler beim Senden an {peer['name']}: {e}")
+            recipients = [p for p in self.registry.all() if p.name != from_peer]
         else:
-            # Direkte Nachricht
             target = self.registry.get(to_peer)
-            if target and target.websocket:
-                try:
-                    await target.websocket.send(json.dumps(outgoing))
-                    await self.store.mark_delivered([msg_id])
-                except Exception as e:
-                    logger.warning(f"Fehler beim Senden an {to_peer}: {e}")
+            recipients = [target] if target else []
 
-    async def _broadcast_peer_joined(self, peer) -> None:
-        """Informiert alle Peers über neuen Teilnehmer."""
-        message = json.dumps({
-            "type": "peer_joined",
-            "peer": {
-                "name": peer.name,
-                "ip": peer.ip,
-                "project": peer.project
-            }
-        })
-        await self._broadcast(message, exclude=peer.name)
+        outgoing = await self.store.store(
+            from_peer,
+            to_peer,
+            message.get("content", ""),
+            message.get("context"),
+            delivered=to_peer == "*" or bool(recipients)
+        )
+        outgoing["type"] = "message"
+        payload = json.dumps(outgoing)
+        for peer in recipients:
+            await self._send_to(peer, payload)
 
-    async def _broadcast_peer_left(self, peer) -> None:
-        """Informiert alle Peers über Austritt."""
-        message = json.dumps({
-            "type": "peer_left",
-            "peer": peer.name
-        })
-        await self._broadcast(message, exclude=peer.name)
+    async def _send_to(self, peer: Peer, payload: str) -> None:
+        try:
+            await peer.websocket.send(payload)
+        except websockets.exceptions.ConnectionClosed:
+            logger.warning(f"Could not deliver to {peer.name}: connection closed")
 
-    async def _broadcast(self, message: str, exclude: Optional[str] = None) -> None:
-        """Sendet Nachricht an alle Peers."""
-        for peer_info in self.registry.get_all():
-            if peer_info["name"] != exclude:
-                peer = self.registry.get(peer_info["name"])
-                if peer and peer.websocket:
-                    try:
-                        await peer.websocket.send(message)
-                    except Exception:
-                        pass
+    async def _announce_joined(self, peer: Peer) -> None:
+        payload = json.dumps({"type": "peer_joined", "peer": {"name": peer.name, "ip": peer.ip}})
+        for other in self.registry.all():
+            if other.name != peer.name:
+                await self._send_to(other, payload)
+
+    async def _announce_left(self, peer: Peer) -> None:
+        payload = json.dumps({"type": "peer_left", "peer": peer.name})
+        for other in self.registry.all():
+            await self._send_to(other, payload)
 
     async def _heartbeat_loop(self) -> None:
-        """Prüft regelmäßig auf inaktive Peers und pingt sie an."""
+        """Drop peers whose connection is dead or that stopped pinging."""
         while True:
-            await asyncio.sleep(60)  # Alle 60 Sekunden statt 10
-
-            # Alle Peers anpingen um tote Verbindungen zu erkennen
-            dead_peers = []
-            for peer_info in self.registry.get_all():
-                peer = self.registry.get(peer_info["name"])
-                if peer and peer.websocket:
-                    try:
-                        await peer.websocket.send(json.dumps({"type": "ping"}))
-                        # Ping erfolgreich - Zeitstempel aktualisieren
-                        self.registry.update_ping(peer_info["name"])
-                    except Exception:
-                        # Verbindung tot - sofort entfernen
-                        dead_peers.append(peer_info["name"])
-                        logger.info(f"Verbindung tot: {peer_info['name']}")
-
-            # Tote Peers sofort entfernen
-            for name in dead_peers:
-                await self.registry.unregister(name)
-
-            # Zusätzlich: Peers ohne Heartbeat entfernen (Fallback)
-            stale = await self.registry.cleanup_stale()
-            for name in stale:
-                logger.info(f"Peer timeout: {name}")
+            await asyncio.sleep(HEARTBEAT_SECONDS)
+            for peer in self.registry.all():
+                try:
+                    await peer.websocket.send(json.dumps({"type": "ping"}))
+                except websockets.exceptions.ConnectionClosed:
+                    logger.info(f"Connection dead: {peer.name}")
+                    await self.registry.unregister(peer.name)
+            for name in await self.registry.cleanup_stale():
+                logger.info(f"Peer timed out: {name}")

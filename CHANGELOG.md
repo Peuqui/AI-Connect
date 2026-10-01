@@ -8,11 +8,22 @@
 
 ### Changed
 - A missing config file or key stops every service with a message; the silent defaults (including a hard-coded Bridge IP) are gone
-- `install.sh` speaks English, writes the PolicyKit rule for the installing user instead of a fixed one, asks clients for the Bridge address and suggests `0.0.0.0` as the Bridge's listen address (`127.0.0.1` locked out every other machine); it ends with the ready `claude mcp add` line
+- Code, log messages, tool descriptions and `install.sh` are in English; `install.sh` writes the PolicyKit rule for the installing user instead of a fixed one, asks clients for the Bridge address and suggests `0.0.0.0` as the Bridge's listen address (`127.0.0.1` locked out every other machine); it ends with the ready `claude mcp add` line
 - `/beratung` renamed to `/consult` and rewritten in English, as are the Claude Code rules and the integration README; tag `[WEITER]` is now `[CONTINUE]`
 - README (EN/DE) rewritten: setup via `install.sh`, Claude Code via the STDIO client, current architecture diagram, corrected heartbeat timings
 
+### Fixed
+- `peer_send` with a file and `peer_context` sent only the path and line numbers; the file content (or the given lines) now travels with the message
+- `peer_history` showed only the local, already emptied queue; it now asks the Bridge
+- A broadcast to offline peers was handed to whichever peer came online first and marked delivered (possibly back to its sender); broadcasts now reach the peers online at that moment
+- A client that could not reach the Bridge at start never retried; it now reconnects in the background
+- The Bridge refreshed a peer's heartbeat whenever it sent to it, so silent peers never timed out; only the peer's own pings count now
+- `register` without a name is rejected instead of registering `None`
+- The HTTP/SSE server had its own copy of every tool and lacked `peer_wait`; both servers now share `client/mcp_app.py`
+
 ### Removed
+- `chat_viewer.py`: it registered as an ordinary peer and therefore never saw the messages it promised to show
+- `peer.auto_connect`: with `false` the client stayed disconnected for good
 - The "Salomo Principle" (AIfred/Sokrates/Salomo roles, 2/3 voting) from docs and command: nothing in AI-Connect implemented it
 - `pyproject.toml`: unused, its entry point named a module that does not exist
 

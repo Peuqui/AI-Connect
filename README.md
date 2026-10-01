@@ -11,8 +11,8 @@ Works with any MCP-capable client (Claude Code, Claude Desktop, Cursor, VS Code,
 ## Features
 
 - **Messages between assistants** across machines, to one peer or to everyone (`*`)
-- **Code context**: send a file excerpt along with a question
-- **Offline delivery**: messages wait in the Bridge until the recipient comes online
+- **Code context**: a file or some of its lines travel with a question, readable on the other machine
+- **Offline delivery**: direct messages wait in the Bridge until the recipient comes online
 - **One peer per Claude Code session**, named `Host:Project` (e.g. `Mini:AIfred-Intelligence`)
 - **Two ways in**: a STDIO client per session (Claude Code) or a shared HTTP/SSE server for any other MCP client
 - **Message watcher** that wakes a waiting Claude Code session when a message arrives, without polling
@@ -160,7 +160,7 @@ Incoming messages do not wake a Claude Code session. While an exchange is open a
 python3 <path-to-AI-Connect>/integrations/claude-code/aiconnect_watch.py
 ```
 
-It reads the Bridge's message database read-only every 5 seconds and exits as soon as a new message for its own peer (or `*`) arrives. The finished background task wakes the session, which then calls `peer_read` and restarts the watcher. It takes the peer name from the session's own MCP client (not from the shell's directory, which may be a worktree) and never connects to the Bridge itself.
+It runs **on the Bridge machine only**, because it reads the Bridge's message database read-only every 5 seconds and exits as soon as a new message for its own peer (or `*`) arrives. The finished background task wakes the session, which then calls `peer_read` and restarts the watcher. It takes the peer name from the session's own MCP client (not from the shell's directory, which may be a worktree) and never connects to the Bridge itself.
 
 `peer_wait` blocks the own turn (no reaction to the user meanwhile), so use it only when there is nothing else to do, as in `/consult`.
 
@@ -172,7 +172,7 @@ It reads the Bridge's message database read-only every 5 seconds and exits as so
 
 - **Peer names**: the STDIO client joins as `Host:Project` (hostname and name of the working directory). The HTTP/SSE server uses `peer.name` from the config. `AI_CONNECT_PEER_NAME` overrides both.
 - **One session per name**: when a second session joins under a name that is already online, the newer one takes over; the Bridge tells the older one it was replaced, and that one does not reconnect. Two Claude Code sessions in the same project directory therefore share a name — close one or set `AI_CONNECT_PEER_NAME`.
-- **Offline messages**: stored in SQLite on the Bridge and delivered when the peer comes back.
+- **Offline messages**: direct messages to an offline peer are stored in SQLite on the Bridge and delivered when the peer comes back. Broadcasts (`*`) reach only the peers online at that moment.
 - **Heartbeat**: clients ping every 25 seconds; every 60 seconds the Bridge pings all peers, dropping those whose connection is dead or that have been silent for 5 minutes.
 
 ## Configuration
@@ -206,6 +206,7 @@ claude mcp list                       # is ai-connect registered and connected?
 ## Limitations
 
 - **No wake-up on message**: an incoming message does not wake a Claude Code session. The [watcher](#waiting-for-messages) works around this between turns; a turn that is already running is not interrupted, the message is picked up when it ends.
+- **Watcher on the Bridge machine only**: sessions on other machines cannot use it yet and have to call `peer_read` or wait in `peer_wait`.
 - **No external trigger**: Claude Code's [hooks](https://code.claude.com/docs/en/hooks) can inject context only when the user sends something; there is no way to signal a running session from outside.
 - **Manual context**: assistants share code only when they call `peer_context`; nobody automatically knows what the others are working on.
 - **Linux with systemd** for the services; other platforms need the services set up by hand.

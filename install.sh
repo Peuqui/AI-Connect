@@ -351,7 +351,6 @@ bridge:
 
 peer:
   name: "$PEER_NAME"
-  auto_connect: true
 
 mcp:
   host: "127.0.0.1"

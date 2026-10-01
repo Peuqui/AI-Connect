@@ -1,186 +1,142 @@
-"""MCP Tools für AI-Connect."""
+"""MCP tools of AI-Connect, shared by the STDIO client and the HTTP/SSE server."""
 
+from datetime import datetime
+from pathlib import Path
 from typing import Optional
 
 from bridge_client import get_client
 
+NOT_CONNECTED = "❌ Not connected to the Bridge Server."
+
+
+def _format_time(timestamp: Optional[str]) -> str:
+    """Bridge timestamps (UTC, ISO) as local HH:MM:SS."""
+    if not timestamp:
+        return "--:--:--"
+    utc = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+    return utc.astimezone().strftime("%H:%M:%S")
+
+
+def _read_excerpt(file: str, lines: Optional[str]) -> str:
+    """Read a file, or the line range "start-end" / "line" of it.
+
+    Relative paths are resolved against the working directory of this MCP
+    server process — for Claude Code that is the session's project.
+    """
+    path = Path(file).expanduser()
+    text = path.read_text(encoding="utf-8")
+    if not lines:
+        return text
+    start_text, _, end_text = lines.partition("-")
+    start = int(start_text)
+    end = int(end_text) if end_text else start
+    return "\n".join(text.splitlines()[start - 1:end])
+
+
+def _build_context(file: Optional[str], lines: Optional[str]) -> Optional[dict]:
+    """Context that travels with a message: path, line range and the text itself."""
+    if not file:
+        return None
+    context = {"file": file, "excerpt": _read_excerpt(file, lines)}
+    if lines:
+        context["lines"] = lines
+    return context
+
+
+def _format_messages(messages: list[dict], me: str) -> str:
+    """Render received messages, including any shared excerpt."""
+    rendered = []
+    for msg in messages:
+        rendered.append(
+            f"📥 [{_format_time(msg.get('timestamp'))}] [{msg['from']} → {me}]: {msg['content']}"
+        )
+        context = msg.get("context")
+        if context:
+            location = context["file"] + (f" lines {context['lines']}" if context.get("lines") else "")
+            rendered.append(f"   📎 {location}\n```\n{context['excerpt']}\n```")
+    return "\n".join(rendered)
+
 
 async def peer_list() -> str:
-    """Zeigt alle online verbundenen Peers.
-
-    Gibt eine Liste aller aktuell mit dem Bridge Server
-    verbundenen KI-Assistenten zurück.
-    """
     client = get_client()
     if not client or not client.connected:
-        return "Nicht mit Bridge Server verbunden."
-
+        return NOT_CONNECTED
     peers = await client.list_peers()
-    if not peers:
-        return "Keine anderen Peers online."
-
-    lines = ["Online Peers:"]
+    lines = ["Online peers:"]
     for peer in peers:
-        # Name hat Format "Host:Projekt", z.B. "Mini:AIfred-Intelligence"
         lines.append(f"  - {peer['name']} [{peer['ip']}]")
-
     return "\n".join(lines)
 
 
-async def peer_send(to: str, message: str, file: Optional[str] = None, lines: Optional[str] = None) -> str:
-    """Sendet eine Nachricht an einen anderen Peer.
-
-    Args:
-        to: Name des Ziel-Peers (oder '*' für Broadcast)
-        message: Die Nachricht die gesendet werden soll
-        file: Optional - Dateipfad für Kontext
-        lines: Optional - Zeilennummern (z.B. "42-58")
-    """
+async def peer_send(to: str, message: str, file: Optional[str], lines: Optional[str]) -> str:
     client = get_client()
     if not client or not client.connected:
-        return "❌ Nicht mit Bridge Server verbunden."
-
-    context = None
-    if file or lines:
-        context = {}
-        if file:
-            context["file"] = file
-        if lines:
-            context["lines"] = lines
-
-    success = await client.send_message(to, message, context)
-    if success:
-        me = client.peer_name
-        return f"📤 [{me} → {to}]: {message}"
-    else:
-        return "❌ Fehler beim Senden der Nachricht."
+        return NOT_CONNECTED
+    try:
+        context = _build_context(file, lines)
+    except (OSError, ValueError) as e:
+        return f"❌ Cannot read {file}: {e}"
+    if not await client.send_message(to, message, context):
+        return "❌ Sending failed, connection to the Bridge lost."
+    attached = f" (+ {file}{' lines ' + lines if lines else ''})" if file else ""
+    return f"📤 [{client.peer_name} → {to}]: {message}{attached}"
 
 
 async def peer_read() -> str:
-    """Liest alle neuen empfangenen Nachrichten.
-
-    Gibt alle Nachrichten zurück die seit dem letzten Aufruf
-    eingegangen sind und markiert sie als gelesen.
-    """
     client = get_client()
     if not client or not client.connected:
-        return "❌ Nicht mit Bridge Server verbunden."
-
+        return NOT_CONNECTED
     messages = client.pop_messages()
     if not messages:
-        return "📭 Keine neuen Nachrichten."
-
-    me = client.peer_name
-    lines = []
-    for msg in messages:
-        sender = msg.get("from", "unbekannt")
-        content = msg.get("content", "")
-        context = msg.get("context")
-
-        # Hauptnachricht
-        lines.append(f"📥 [{sender} → {me}]: {content}")
-
-        # Kontext falls vorhanden
-        if context:
-            ctx_parts = []
-            if context.get("file"):
-                ctx_parts.append(context['file'])
-            if context.get("lines"):
-                ctx_parts.append(f"Z.{context['lines']}")
-            if ctx_parts:
-                lines.append(f"   📎 {' '.join(ctx_parts)}")
-
-    return "\n".join(lines)
+        return "📭 No new messages."
+    return _format_messages(messages, client.peer_name)
 
 
-async def peer_wait(timeout: int = 60) -> str:
-    """Wartet (Long-Poll) bis neue Nachrichten ankommen oder Timeout greift.
-
-    Returnt sofort sobald eine Nachricht eintrifft (Latenz ~0ms statt
-    Polling-Lag). Returnt leer wenn der Timeout abläuft ohne Nachricht.
-
-    Args:
-        timeout: Maximale Wartezeit in Sekunden (Standard: 60)
-    """
+async def peer_wait(timeout: int) -> str:
     client = get_client()
     if not client or not client.connected:
-        return "❌ Nicht mit Bridge Server verbunden."
-
+        return NOT_CONNECTED
     messages = await client.wait_for_messages(timeout=float(timeout))
     if not messages:
-        return "📭 Timeout - keine neuen Nachrichten."
-
-    me = client.peer_name
-    lines = []
-    for msg in messages:
-        sender = msg.get("from", "unbekannt")
-        content = msg.get("content", "")
-        context = msg.get("context")
-
-        lines.append(f"📥 [{sender} → {me}]: {content}")
-
-        if context:
-            ctx_parts = []
-            if context.get("file"):
-                ctx_parts.append(context['file'])
-            if context.get("lines"):
-                ctx_parts.append(f"Z.{context['lines']}")
-            if ctx_parts:
-                lines.append(f"   📎 {' '.join(ctx_parts)}")
-
-    return "\n".join(lines)
+        return "📭 Timeout - no new messages."
+    return _format_messages(messages, client.peer_name)
 
 
-async def peer_history(peer: str, limit: int = 20) -> str:
-    """Zeigt den Chatverlauf mit einem bestimmten Peer.
-
-    Args:
-        peer: Name des Peers
-        limit: Maximale Anzahl der Nachrichten (Standard: 20)
-    """
+async def peer_history(peer: str, limit: int) -> str:
     client = get_client()
     if not client or not client.connected:
-        return "Nicht mit Bridge Server verbunden."
-
-    # Hier müsste der Client die Historie vom Server holen
-    # Vereinfacht: Wir zeigen nur lokale Messages
-    messages = [m for m in client.messages if m.get("from") == peer or m.get("to") == peer]
-
+        return NOT_CONNECTED
+    messages = await client.get_history(peer, limit)
     if not messages:
-        return f"Kein Chatverlauf mit '{peer}'."
-
-    lines = [f"Chatverlauf mit {peer}:"]
-    for msg in messages[-limit:]:
-        sender = msg.get("from", "?")
-        content = msg.get("content", "")
-        timestamp = msg.get("timestamp", "")[:19].replace("T", " ")
-        lines.append(f"\n[{timestamp}] {sender}: {content}")
-
+        return f"No conversation with '{peer}'."
+    lines = [f"Conversation with {peer}:"]
+    for msg in messages:
+        direction = "📤" if msg["from"] == client.peer_name else "📥"
+        lines.append(f"{direction} [{_format_time(msg['timestamp'])}] {msg['from']}: {msg['content']}")
     return "\n".join(lines)
 
 
-async def peer_context(file: str, lines: Optional[str] = None, message: Optional[str] = None) -> str:
-    """Teilt den aktuellen Datei-Kontext mit allen Peers.
-
-    Args:
-        file: Pfad zur Datei die geteilt werden soll
-        lines: Optional - Zeilennummern (z.B. "42-58")
-        message: Optional - Begleitende Nachricht
-    """
+async def peer_context(file: str, lines: Optional[str], message: Optional[str]) -> str:
     client = get_client()
     if not client or not client.connected:
-        return "Nicht mit Bridge Server verbunden."
+        return NOT_CONNECTED
+    try:
+        context = _build_context(file, lines)
+    except (OSError, ValueError) as e:
+        return f"❌ Cannot read {file}: {e}"
+    content = message or f"Shared {file}" + (f" (lines {lines})" if lines else "")
+    if not await client.send_message("*", content, context):
+        return "❌ Sharing failed, connection to the Bridge lost."
+    return f"📤 Shared with all online peers: {file}" + (f" lines {lines}" if lines else "")
 
-    context = {"file": file}
-    if lines:
-        context["lines"] = lines
 
-    content = message or f"Schaut euch mal {file} an"
-    if lines:
-        content += f" (Zeilen {lines})"
-
-    success = await client.send_message("*", content, context)
-    if success:
-        return f"Kontext geteilt: {file}"
-    else:
-        return "Fehler beim Teilen des Kontexts."
+async def peer_status() -> str:
+    client = get_client()
+    if not client:
+        return "Client not initialised."
+    bridge = f"{client.host}:{client.port}"
+    if client.connected:
+        return f"✅ Connected as '{client.peer_name}' to the Bridge Server {bridge}"
+    if client.reconnecting:
+        return f"🔄 Reconnecting to the Bridge Server {bridge}..."
+    return f"❌ Not connected. Bridge Server: {bridge}"

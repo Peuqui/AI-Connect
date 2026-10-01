@@ -17,7 +17,7 @@ Incoming peer messages do **not** wake a Claude Code session. While an exchange 
 python3 ~/Projekte/AI-Connect/integrations/claude-code/aiconnect_watch.py
 ```
 
-(Adjust the path to where the repository lives.)
+(Adjust the path to where the repository lives. The watcher reads the Bridge's database and therefore works on the Bridge machine only.)
 
 - It reads `~/.config/ai-connect/messages.db` **read-only** every 5 s and exits as soon as a new message for its own peer (or `*`) arrives. The finished background task wakes the session; then `peer_read`, answer, restart the watcher.
 - It takes the peer name from the session's own MCP client, regardless of the shell's current directory (worktrees!), and prints it at start: check that it is your own. A name given as first argument takes precedence.
