@@ -28,7 +28,8 @@ running as a background task (Bash with run_in_background) for the whole
 session — start it at the beginning and again every time it ends:
     {WATCH_COMMAND}
 It costs nothing while it waits and ends at the next message for this peer
-(or when the Bridge restarts); the finished task wakes the session. Then
+(or when the Bridge restarts, or after 110 minutes, which only needs a
+restart); the finished task wakes the session. Then
 FIRST start the watcher again, THEN call peer_read and react — in this
 order a message arriving meanwhile still wakes you."""
 

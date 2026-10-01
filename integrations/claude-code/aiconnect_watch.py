@@ -9,7 +9,12 @@ cannot take over the peer name. While it waits it costs nothing: the Bridge
 pushes, nothing polls.
 
 It also exits when the connection to the Bridge drops (e.g. a Bridge
-restart); the session then simply starts it again.
+restart), and after MAX_MINUTES without a message: Claude Code kills
+background tasks after two hours, and a killed watcher would leave the
+session deaf. Either way the session simply starts it again.
+
+Exit codes: 0 = message arrived (restart, then peer_read), 2 = time limit
+reached (restart, nothing to read), 1 = error.
 
 Usage: aiconnect_watch.py [PEER_NAME]
 Without PEER_NAME it watches for the name the AI-Connect MCP client of this
@@ -31,6 +36,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import websockets  # noqa: E402
 
 from config_loader import load_config  # noqa: E402
+
+# Below Claude Code's two-hour limit for background tasks
+MAX_MINUTES = 110
 
 
 def session_peer_name() -> str | None:
@@ -92,7 +100,10 @@ def main() -> None:
             "or set AI_CONNECT_PEER_NAME"
         )
     try:
-        asyncio.run(watch(peer))
+        asyncio.run(asyncio.wait_for(watch(peer), timeout=MAX_MINUTES * 60))
+    except asyncio.TimeoutError:
+        print(f"no message for {MAX_MINUTES} min - start the watcher again, nothing to read")
+        sys.exit(2)
     except OSError as e:
         sys.exit(f"aiconnect_watch.py: cannot reach the Bridge: {e}")
 
