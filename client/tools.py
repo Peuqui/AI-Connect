@@ -9,12 +9,14 @@ from bridge_client import get_client
 NOT_CONNECTED = "❌ Not connected to the Bridge Server."
 
 
-def _format_time(timestamp: Optional[str]) -> str:
-    """Bridge timestamps (UTC, ISO) as local HH:MM:SS."""
-    if not timestamp:
-        return "--:--:--"
-    utc = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
-    return utc.astimezone().strftime("%H:%M:%S")
+def _format_time(moment: datetime) -> str:
+    """Local HH:MM:SS.mmm — milliseconds keep the order of quick exchanges clear."""
+    return moment.astimezone().strftime("%H:%M:%S.%f")[:-3]
+
+
+def _format_bridge_time(timestamp: str) -> str:
+    """A Bridge timestamp (UTC, ISO) in local time."""
+    return _format_time(datetime.fromisoformat(timestamp.replace("Z", "+00:00")))
 
 
 def _read_excerpt(file: str, lines: Optional[str]) -> str:
@@ -48,7 +50,7 @@ def _format_messages(messages: list[dict], me: str) -> str:
     rendered = []
     for msg in messages:
         rendered.append(
-            f"📥 [{_format_time(msg.get('timestamp'))}] [{msg['from']} → {me}]: {msg['content']}"
+            f"📥 [{_format_bridge_time(msg['timestamp'])}] [{msg['from']} → {me}]: {msg['content']}"
         )
         context = msg.get("context")
         if context:
@@ -79,7 +81,7 @@ async def peer_send(to: str, message: str, file: Optional[str], lines: Optional[
     if not await client.send_message(to, message, context):
         return "❌ Sending failed, connection to the Bridge lost."
     attached = f" (+ {file}{' lines ' + lines if lines else ''})" if file else ""
-    return f"📤 [{client.peer_name} → {to}]: {message}{attached}"
+    return f"📤 [{_format_time(datetime.now())}] [{client.peer_name} → {to}]: {message}{attached}"
 
 
 async def peer_read() -> str:
@@ -112,7 +114,7 @@ async def peer_history(peer: str, limit: int) -> str:
     lines = [f"Conversation with {peer}:"]
     for msg in messages:
         direction = "📤" if msg["from"] == client.peer_name else "📥"
-        lines.append(f"{direction} [{_format_time(msg['timestamp'])}] {msg['from']}: {msg['content']}")
+        lines.append(f"{direction} [{_format_bridge_time(msg['timestamp'])}] {msg['from']}: {msg['content']}")
     return "\n".join(lines)
 
 
@@ -127,7 +129,7 @@ async def peer_context(file: str, lines: Optional[str], message: Optional[str]) 
     content = message or f"Shared {file}" + (f" (lines {lines})" if lines else "")
     if not await client.send_message("*", content, context):
         return "❌ Sharing failed, connection to the Bridge lost."
-    return f"📤 Shared with all online peers: {file}" + (f" lines {lines}" if lines else "")
+    return f"📤 [{_format_time(datetime.now())}] Shared with all online peers: {file}" + (f" lines {lines}" if lines else "")
 
 
 async def peer_status() -> str:

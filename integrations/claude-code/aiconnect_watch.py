@@ -80,6 +80,8 @@ while True:
         ).fetchall()
     if rows:
         for sender, timestamp, content in rows:
-            print(f"[{timestamp}] {sender} -> {peer}: {content}")
+            received = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+            local = received.astimezone().strftime("%H:%M:%S.%f")[:-3]
+            print(f"[{local}] {sender} -> {peer}: {content}")
         sys.exit(0)
     time.sleep(POLL_SECONDS)
