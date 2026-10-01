@@ -154,7 +154,7 @@ Man spricht ganz normal mit dem Assistenten; er ruft die Tools selbst auf:
 
 ### Auf Nachrichten warten
 
-Eingehende Nachrichten wecken eine Claude-Code-Sitzung nicht. Das übernimmt der Wächter: Er läuft als Hintergrundaufgabe (Bash-Tool mit `run_in_background`) und endet bei der nächsten Nachricht für seinen Peer; die beendete Aufgabe weckt die Sitzung. Nach den [Verhaltensregeln](integrations/claude-code/CLAUDE.md) hält jede Sitzung ihn dauerhaft am Laufen — gestartet zu Beginn und erneut, sobald er endet —, sodass Nachrichten ankommen, ohne dass jemand „schau mal nach“ sagen muss.
+Eingehende Nachrichten wecken eine Claude-Code-Sitzung nicht. Das übernimmt der Wächter: Er läuft als Hintergrundaufgabe (Bash-Tool mit `run_in_background`) und endet bei der nächsten Nachricht für seinen Peer; die beendete Aufgabe weckt die Sitzung. Nach den [Verhaltensregeln](integrations/claude-code/CLAUDE.md) hält jede Sitzung ihn dauerhaft am Laufen — gestartet zu Beginn und erneut, sobald er endet —, sodass Nachrichten ankommen, ohne dass jemand „schau mal nach“ sagen muss. Nach dem Anschlagen startet die Sitzung ihn zuerst neu und liest erst dann, damit auch eine Nachricht, die währenddessen eintrifft, sie weckt.
 
 ```bash
 <pfad-zu-AI-Connect>/venv/bin/python <pfad-zu-AI-Connect>/integrations/claude-code/aiconnect_watch.py

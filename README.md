@@ -154,7 +154,7 @@ You talk to your assistant as usual; it calls the tools:
 
 ### Waiting for messages
 
-Incoming messages do not wake a Claude Code session. The watcher does: it runs as a background task (Bash tool with `run_in_background`) and ends at the next message for its peer, and the finished task wakes the session. Following the [behaviour rules](integrations/claude-code/CLAUDE.md), every session keeps it running — started at the beginning and again whenever it ends — so messages arrive without anyone having to say "check your messages".
+Incoming messages do not wake a Claude Code session. The watcher does: it runs as a background task (Bash tool with `run_in_background`) and ends at the next message for its peer, and the finished task wakes the session. Following the [behaviour rules](integrations/claude-code/CLAUDE.md), every session keeps it running — started at the beginning and again whenever it ends — so messages arrive without anyone having to say "check your messages". After it fires, the session first restarts it and only then reads, so a message arriving meanwhile wakes it as well.
 
 ```bash
 <path-to-AI-Connect>/venv/bin/python <path-to-AI-Connect>/integrations/claude-code/aiconnect_watch.py
