@@ -3,9 +3,8 @@
 import asyncio
 import logging
 import signal
-from pathlib import Path
 
-import yaml
+from config_loader import load_config
 
 from .websocket_server import BridgeServer
 
@@ -16,29 +15,13 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def load_config() -> dict:
-    """Lädt die Konfiguration aus config.yaml."""
-    config_paths = [
-        Path("config.yaml"),
-        Path(__file__).parent.parent / "config.yaml",
-        Path.home() / ".config" / "ai-connect" / "config.yaml"
-    ]
-
-    for path in config_paths:
-        if path.exists():
-            with open(path) as f:
-                return yaml.safe_load(f)
-
-    return {"bridge": {"host": "0.0.0.0", "port": 9999}}
-
-
 async def run_server() -> None:
     """Startet den Bridge Server."""
     config = load_config()
-    bridge_config = config.get("bridge", {})
+    bridge_config = config["bridge"]
 
-    host = bridge_config.get("host", "0.0.0.0")
-    port = bridge_config.get("port", 9999)
+    host = bridge_config["host"]
+    port = bridge_config["port"]
 
     server = BridgeServer(host=host, port=port)
 

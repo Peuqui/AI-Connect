@@ -1,12 +1,21 @@
-# AI-Connect Konfiguration
-# Kopiere diese Datei nach ~/.config/ai-connect/config.yaml und passe sie an.
+# AI-Connect configuration
+# ./install.sh writes this file. To set it up by hand, copy it to
+# ~/.config/ai-connect/config.yaml and adjust it. All keys are required.
 
 bridge:
-  host: "192.168.0.252"
+  # On the Bridge machine: listen address (0.0.0.0 = reachable from the network).
+  # On every other machine: IP or hostname of the Bridge machine.
+  host: "0.0.0.0"
   port: 9999
 
 peer:
+  # Name of this machine's HTTP/SSE server in the network. The STDIO client
+  # (Claude Code) names itself "Hostname:Project" instead, e.g.
+  # Mini:AIfred-Intelligence. AI_CONNECT_PEER_NAME overrides both.
+  name: "my-machine"
   auto_connect: true
-  # Peer-Name wird automatisch als "Hostname:Projekt" gebildet
-  # (z.B. mini:AIfred-Intelligence, Aragon:FreeEchoDot2).
-  # Optional manuell überschreiben über ENV: AI_CONNECT_PEER_NAME
+
+mcp:
+  # Address of the local HTTP/SSE server for MCP clients
+  host: "127.0.0.1"
+  port: 9998
