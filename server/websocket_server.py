@@ -26,6 +26,9 @@ class BridgeServer:
         self.store = MessageStore()
         self._server: Optional[Server] = None
         self._heartbeat_task: Optional[asyncio.Task] = None
+        # Watchers per peer name: connections that want to hear about new
+        # messages for that peer without registering as it
+        self._watchers: dict[str, set[ServerConnection]] = {}
 
         self.registry.on_join(self._announce_joined)
         self.registry.on_leave(self._announce_left)
@@ -78,6 +81,14 @@ class BridgeServer:
                         self.registry.update_ping(peer_name)
                     await websocket.send(json.dumps({"type": "pong"}))
 
+                elif msg_type == "watch":
+                    watched = message.get("peer")
+                    if not watched:
+                        await self._send_error(websocket, "'watch' needs a 'peer'")
+                        continue
+                    self._watchers.setdefault(watched, set()).add(websocket)
+                    await websocket.send(json.dumps({"type": "watching", "peer": watched}))
+
                 elif msg_type == "list_peers":
                     await websocket.send(json.dumps({
                         "type": "peer_list",
@@ -106,6 +117,8 @@ class BridgeServer:
         except websockets.exceptions.ConnectionClosed:
             pass
         finally:
+            for watchers in self._watchers.values():
+                watchers.discard(websocket)
             logger.info(f"Connection closed: {peer_name or client_ip}")
             # Only remove the peer if this connection is still the active one;
             # after a takeover the name belongs to the new connection.
@@ -146,6 +159,20 @@ class BridgeServer:
         payload = json.dumps(outgoing)
         for peer in recipients:
             await self._send_to(peer, payload)
+        await self._notify_watchers(to_peer, from_peer, payload)
+
+    async def _notify_watchers(self, to_peer: str, from_peer: str, payload: str) -> None:
+        """Tell the watchers of every recipient that a message arrived."""
+        if to_peer == "*":
+            watched = [name for name in self._watchers if name != from_peer]
+        else:
+            watched = [to_peer]
+        for name in watched:
+            for watcher in list(self._watchers.get(name, ())):
+                try:
+                    await watcher.send(payload)
+                except websockets.exceptions.ConnectionClosed:
+                    self._watchers[name].discard(watcher)
 
     async def _send_to(self, peer: Peer, payload: str) -> None:
         try:
