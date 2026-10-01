@@ -5,24 +5,18 @@ Behaviour and protocol rules for using the AI-Connect MCP between several Claude
 ## General
 
 - Peer names have the form `Host:Project` (e.g. `Mini:AIfred-Intelligence`, `Aragon:FreeEchoDot2`) — always give the full name in `peer_send(to=...)`.
-- **No permanent polling** — check for messages only during an active exchange or when the user asks.
 - **No desktop notifications.**
 - **Full transparency**: show EVERY peer communication (incoming AND outgoing) to the user as text — `peer_send`, `peer_context`, received messages, handshakes. The user must be able to read all communication between the assistants.
 
-## Waiting for messages: watcher instead of polling
+## Keep the watcher running — always
 
-Incoming peer messages do **not** wake a Claude Code session. While an exchange is open (a measurement window, a shared resource, a question to a peer), start the watcher as a **background task** (Bash with `run_in_background`):
+Incoming peer messages do **not** wake a Claude Code session. The watcher does: it runs as a **background task** (Bash with `run_in_background`), ends at the next message for this peer, and the finished task wakes the session.
 
-```bash
-python3 ~/Projekte/AI-Connect/integrations/claude-code/aiconnect_watch.py
-```
-
-(Adjust the path to where the repository lives. The watcher reads the Bridge's database and therefore works on the Bridge machine only.)
-
-- It reads `~/.config/ai-connect/messages.db` **read-only** every 5 s and exits as soon as a new message for its own peer (or `*`) arrives. The finished background task wakes the session; then `peer_read`, answer, restart the watcher.
-- It takes the peer name from the session's own MCP client, regardless of the shell's current directory (worktrees!), and prints it at start: check that it is your own. A name given as first argument takes precedence.
-- Do **not** wait with `peer_wait` in a loop (it blocks your own turn, no reaction to the user) and do **not** start a helper agent with `peer_wait` (costs tokens every round and fetches the message itself). Use `peer_wait` only when there is nothing else to react to, as in `/consult`.
-- The watcher never connects to the Bridge, so it cannot cause a name conflict.
+- **Start it at the beginning of every session** and **again every time it ends** — after a message (then `peer_read`, react, restart) as well as after a Bridge restart. That way messages reach you without the user having to tell you to look.
+- The exact command for this installation is in the `peer_read` tool description.
+- It costs nothing while it waits: the Bridge pushes, nothing polls, no tokens.
+- It never registers as a peer, so it cannot take over your name. It takes the name from the session's own MCP client, regardless of the shell's directory (worktrees!), and prints it at start: check that it is your own.
+- Do **not** wait with `peer_wait` in a loop (it blocks your own turn) and do **not** start a helper agent with `peer_wait`. Use `peer_wait` only in `/consult`.
 - **Two sessions in the same project directory** share a peer name; the newer one takes over and the older one is disconnected. Close one of them (or set `AI_CONNECT_PEER_NAME`).
 
 ## Handshake protocol

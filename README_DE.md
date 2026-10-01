@@ -15,7 +15,7 @@ Funktioniert mit jedem MCP-fähigen Client (Claude Code, Claude Desktop, Cursor,
 - **Offline-Zustellung**: Direktnachrichten warten in der Bridge, bis der Empfänger online ist
 - **Ein Peer pro Claude-Code-Sitzung**, benannt als `Host:Projekt` (z.B. `Mini:AIfred-Intelligence`)
 - **Zwei Zugänge**: ein STDIO-Client pro Sitzung (Claude Code) oder ein gemeinsamer HTTP/SSE-Server für jeden anderen MCP-Client
-- **Nachrichten-Wächter**, der eine wartende Claude-Code-Sitzung bei einer neuen Nachricht weckt, ohne Polling
+- **Nachrichten-Wächter**, der eine Claude-Code-Sitzung bei einer neuen Nachricht weckt — von der Bridge angestoßen, ohne Polling, ohne Tokens beim Warten
 - **Handshake-Protokoll** (`[LGTM]` / `[CONTINUE]`), damit beide Seiten wissen, wann eine Diskussion abgeschlossen ist
 
 ## Warum es das gibt
@@ -154,13 +154,13 @@ Man spricht ganz normal mit dem Assistenten; er ruft die Tools selbst auf:
 
 ### Auf Nachrichten warten
 
-Eingehende Nachrichten wecken eine Claude-Code-Sitzung nicht. Solange eine Absprache offen ist und die Sitzung weiterarbeitet, den Wächter als Hintergrundaufgabe starten (Bash-Tool mit `run_in_background`):
+Eingehende Nachrichten wecken eine Claude-Code-Sitzung nicht. Das übernimmt der Wächter: Er läuft als Hintergrundaufgabe (Bash-Tool mit `run_in_background`) und endet bei der nächsten Nachricht für seinen Peer; die beendete Aufgabe weckt die Sitzung. Nach den [Verhaltensregeln](integrations/claude-code/CLAUDE.md) hält jede Sitzung ihn dauerhaft am Laufen — gestartet zu Beginn und erneut, sobald er endet —, sodass Nachrichten ankommen, ohne dass jemand „schau mal nach“ sagen muss.
 
 ```bash
-python3 <pfad-zu-AI-Connect>/integrations/claude-code/aiconnect_watch.py
+<pfad-zu-AI-Connect>/venv/bin/python <pfad-zu-AI-Connect>/integrations/claude-code/aiconnect_watch.py
 ```
 
-Er läuft **nur auf dem Bridge-Rechner**, denn er liest alle 5 Sekunden nur lesend die Nachrichtendatenbank der Bridge und beendet sich, sobald eine neue Nachricht für den eigenen Peer (oder `*`) eintrifft. Die beendete Hintergrundaufgabe weckt die Sitzung, die dann `peer_read` aufruft und den Wächter neu startet. Den Peer-Namen liest er vom MCP-Client der eigenen Sitzung ab (nicht aus dem Verzeichnis der Shell, das ein Worktree sein kann), und er meldet sich selbst nie an der Bridge an.
+Die Tool-Beschreibung von `peer_read` enthält diesen Befehl mit den echten Pfaden der Installation. Der Wächter bittet die Bridge über das Netz, ihm Nachrichten für den Peer zu melden, ohne sich als dieser anzumelden: Er funktioniert auf jedem Rechner, kann den Namen nicht übernehmen und kostet beim Warten nichts. Den Peer-Namen liest er vom MCP-Client der eigenen Sitzung ab (nicht aus dem Verzeichnis der Shell, das ein Worktree sein kann).
 
 `peer_wait` blockiert die eigene Runde (keine Reaktion auf den User währenddessen), also nur verwenden, wenn es sonst nichts zu tun gibt, wie in `/consult`.
 
@@ -206,7 +206,6 @@ claude mcp list                       # Ist ai-connect eingetragen und verbunden
 ## Einschränkungen
 
 - **Kein Wecken bei Nachricht**: Eine eingehende Nachricht weckt keine Claude-Code-Sitzung. Der [Wächter](#auf-nachrichten-warten) umgeht das zwischen zwei Runden; eine bereits laufende Runde wird nicht unterbrochen, die Nachricht wird aufgegriffen, wenn sie endet.
-- **Wächter nur auf dem Bridge-Rechner**: Sitzungen auf anderen Rechnern können ihn noch nicht nutzen und müssen `peer_read` aufrufen oder in `peer_wait` warten.
 - **Kein Auslöser von außen**: Claude Codes [Hooks](https://code.claude.com/docs/en/hooks) können Kontext nur einspeisen, wenn der User etwas schickt; eine laufende Sitzung lässt sich von außen nicht anstoßen.
 - **Kontext nur auf Zuruf**: Assistenten teilen Code nur, wenn sie `peer_context` aufrufen; niemand weiß automatisch, woran die anderen arbeiten.
 - **Linux mit systemd** für die Dienste; auf anderen Plattformen müssen die Dienste von Hand eingerichtet werden.

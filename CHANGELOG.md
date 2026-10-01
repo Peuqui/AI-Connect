@@ -3,6 +3,7 @@
 ## [Unreleased] - 2026-10-01
 
 ### Added
+- The rules make every Claude Code session keep its watcher running from the start, so messages wake the recipient without the user prompting it; the tool descriptions carry the exact watcher command of the installation
 - `requirements.txt` as the single list of dependencies; `install.sh` installs from it (`aiosqlite` was missing, the Bridge crashed on fresh machines)
 - `config_loader.py`: one config loader for the Bridge and both MCP clients
 
@@ -13,6 +14,7 @@
 - README (EN/DE) rewritten: setup via `install.sh`, Claude Code via the STDIO client, current architecture diagram, corrected heartbeat timings
 
 ### Fixed
+- The watcher read the Bridge's database file and therefore worked on the Bridge machine only; it now asks the Bridge over the network (`watch`, no registration) and works on every machine, pushed instead of polling every 5 s
 - `peer_send` with a file and `peer_context` sent only the path and line numbers; the file content (or the given lines) now travels with the message
 - `peer_history` showed only the local, already emptied queue; it now asks the Bridge
 - A broadcast to offline peers was handed to whichever peer came online first and marked delivered (possibly back to its sender); broadcasts now reach the peers online at that moment

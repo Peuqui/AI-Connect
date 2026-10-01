@@ -3,12 +3,13 @@
 
 Claude Code is not woken by incoming peer messages. Started as a background
 task, this script ends when a message arrives, and the finished task wakes the
-session. It polls the bridge's message store read-only and never connects to
-the bridge, so it cannot take over the peer name.
+session. It asks the Bridge over the network to be told about messages for
+the peer, without registering as that peer, so it works on every machine and
+cannot take over the peer name. While it waits it costs nothing: the Bridge
+pushes, nothing polls.
 
-The bridge marks a message delivered as soon as the connected MCP client
-receives it, so this watches for rows newer than its own start, not for
-undelivered ones.
+It also exits when the connection to the Bridge drops (e.g. a Bridge
+restart); the session then simply starts it again.
 
 Usage: aiconnect_watch.py [PEER_NAME]
 Without PEER_NAME it watches for the name the AI-Connect MCP client of this
@@ -16,17 +17,20 @@ Claude Code session registered with (see session_peer_name), else for
 AI_CONNECT_PEER_NAME. It prints the name it watches for when it starts.
 """
 
+import asyncio
+import json
 import os
 import socket
-import sqlite3
 import sys
-import time
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 
-DB = Path.home() / ".config" / "ai-connect" / "messages.db"
-POLL_SECONDS = 5
+# config_loader lives in the repository root
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+import websockets  # noqa: E402
+
+from config_loader import load_config  # noqa: E402
 
 
 def session_peer_name() -> str | None:
@@ -56,32 +60,42 @@ def session_peer_name() -> str | None:
     return None
 
 
-peer = (
-    sys.argv[1]
-    if len(sys.argv) > 1
-    else session_peer_name() or os.environ.get("AI_CONNECT_PEER_NAME")
-)
-if not peer:
-    sys.exit(
-        "aiconnect_watch.py: no peer name - pass it as the first argument, "
-        "run it inside a Claude Code session with the AI-Connect MCP client, "
-        "or set AI_CONNECT_PEER_NAME"
-    )
-print(f"watching for messages to {peer}", flush=True)
-start = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+async def watch(peer: str) -> None:
+    bridge = load_config()["bridge"]
+    uri = f"ws://{bridge['host']}:{bridge['port']}"
+    async with websockets.connect(uri) as ws:
+        await ws.send(json.dumps({"type": "watch", "peer": peer}))
+        async for raw in ws:
+            data = json.loads(raw)
+            if data.get("type") == "watching":
+                print(f"watching for messages to {peer} via {uri}", flush=True)
+            elif data.get("type") == "error":
+                sys.exit(f"aiconnect_watch.py: Bridge refused: {data.get('error')}")
+            elif data.get("type") == "message":
+                received = datetime.fromisoformat(data["timestamp"].replace("Z", "+00:00"))
+                local = received.astimezone().strftime("%H:%M:%S.%f")[:-3]
+                print(f"[{local}] {data['from']} -> {data['to']}: {data['content']}")
+                return
+    sys.exit("aiconnect_watch.py: connection to the Bridge closed - start the watcher again")
 
-while True:
-    with sqlite3.connect(f"file:{DB}?mode=ro", uri=True) as conn:
-        rows = conn.execute(
-            "SELECT from_peer, timestamp, content FROM messages "
-            "WHERE (to_peer = ? OR to_peer = '*') AND from_peer != ? "
-            "AND timestamp > ? ORDER BY timestamp",
-            (peer, peer, start),
-        ).fetchall()
-    if rows:
-        for sender, timestamp, content in rows:
-            received = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
-            local = received.astimezone().strftime("%H:%M:%S.%f")[:-3]
-            print(f"[{local}] {sender} -> {peer}: {content}")
-        sys.exit(0)
-    time.sleep(POLL_SECONDS)
+
+def main() -> None:
+    peer = (
+        sys.argv[1]
+        if len(sys.argv) > 1
+        else session_peer_name() or os.environ.get("AI_CONNECT_PEER_NAME")
+    )
+    if not peer:
+        sys.exit(
+            "aiconnect_watch.py: no peer name - pass it as the first argument, "
+            "run it inside a Claude Code session with the AI-Connect MCP client, "
+            "or set AI_CONNECT_PEER_NAME"
+        )
+    try:
+        asyncio.run(watch(peer))
+    except OSError as e:
+        sys.exit(f"aiconnect_watch.py: cannot reach the Bridge: {e}")
+
+
+if __name__ == "__main__":
+    main()

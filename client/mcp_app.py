@@ -4,7 +4,9 @@ Shared by the STDIO client (one per Claude Code session) and the HTTP/SSE
 server; they differ only in the peer name and the transport.
 """
 
+import sys
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Optional
 
 from fastmcp import FastMCP
@@ -12,6 +14,22 @@ from fastmcp import FastMCP
 import tools
 from bridge_client import get_client, init_client
 from config_loader import load_config
+
+# The exact command of this installation: same Python (it has websockets),
+# real path. The tool descriptions carry it, so every assistant can start
+# the watcher without knowing where AI-Connect lives.
+WATCH_COMMAND = (
+    f"{sys.executable} "
+    f"{Path(__file__).resolve().parent.parent / 'integrations' / 'claude-code' / 'aiconnect_watch.py'}"
+)
+
+WATCHER_NOTE = f"""Incoming messages do not wake a Claude Code session. Keep the watcher
+running as a background task (Bash with run_in_background) for the whole
+session — start it at the beginning and again every time it ends:
+    {WATCH_COMMAND}
+It costs nothing while it waits and ends at the next message for this peer
+(or when the Bridge restarts); the finished task wakes the session. Then
+call peer_read, react, and start the watcher again."""
 
 
 def create_app(peer_name: str) -> FastMCP:
@@ -40,6 +58,9 @@ def create_app(peer_name: str) -> FastMCP:
     async def peer_send(to: str, message: str, file: Optional[str] = None, lines: Optional[str] = None) -> str:
         """Send a message to another peer.
 
+        If you expect an answer, make sure your watcher is running (see
+        peer_read) — the answer then wakes you by itself.
+
         Args:
             to: Full name of the target peer ("Host:Project"), or "*" for every online peer
             message: The message
@@ -53,15 +74,8 @@ def create_app(peer_name: str) -> FastMCP:
         """
         return await tools.peer_send(to, message, file, lines)
 
-    @mcp.tool()
+    @mcp.tool(description=f"Read all messages received since the last call.\n\n{WATCHER_NOTE}")
     async def peer_read() -> str:
-        """Read all messages received since the last call.
-
-        Incoming messages do not wake the session. Whoever waits for an
-        answer while working on starts the watcher as a background task:
-        python3 <path-to-AI-Connect>/integrations/claude-code/aiconnect_watch.py
-        It ends at the next message for this peer; then call peer_read.
-        """
         return await tools.peer_read()
 
     @mcp.tool()
@@ -69,11 +83,10 @@ def create_app(peer_name: str) -> FastMCP:
         """Long-poll: wait until messages arrive or the timeout passes.
 
         Returns as soon as a message arrives, but blocks your own turn:
-        meanwhile you cannot react to the user. For exchanges where you keep
-        working, start the watcher as a background task instead (see
-        peer_read); use peer_wait only when there is nothing else to do
-        (e.g. /consult). Do not call it in a loop from a helper agent, which
-        costs tokens every round.
+        meanwhile you cannot react to the user. Normally the watcher (see
+        peer_read) is the way to wait; use peer_wait only when there is
+        nothing else to do (e.g. /consult). Do not call it in a loop from a
+        helper agent, which costs tokens every round.
 
         Args:
             timeout: Maximum wait in seconds (default 60)

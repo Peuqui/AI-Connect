@@ -16,7 +16,7 @@ Add one line to your global `~/.claude/CLAUDE.md` (or a project `CLAUDE.md`):
 @<absolute-path-to-repo>/integrations/claude-code/CLAUDE.md
 ```
 
-Claude Code resolves `@` imports when it loads the file. The rules contain the path to the watcher (`~/Projekte/AI-Connect/...`); adjust it if your clone lives elsewhere.
+Claude Code resolves `@` imports when it loads the file.
 
 ### 3. Install the slash command
 
@@ -29,15 +29,15 @@ A symlink keeps the command in sync with the repository; `git pull` is enough to
 
 ## Usage
 
-### Waiting for messages while working on
+### The watcher
 
-Incoming messages do not wake a session. On the Bridge machine, start the watcher as a background task (Bash tool with `run_in_background`):
+Incoming messages do not wake a session; the watcher does. Following the rules, every session starts it as a background task at the beginning and again whenever it ends — after a message, it calls `peer_read`, reacts and restarts it. The exact command of your installation is in the `peer_read` tool description; by hand:
 
 ```bash
-python3 ~/Projekte/AI-Connect/integrations/claude-code/aiconnect_watch.py
+<path-to-AI-Connect>/venv/bin/python <path-to-AI-Connect>/integrations/claude-code/aiconnect_watch.py
 ```
 
-It ends at the next message for its own peer; the finished background task wakes the session. Then `peer_read`, answer, restart the watcher. Details: [CLAUDE.md](CLAUDE.md). The watcher reads the Bridge's message database, so it works on the Bridge machine only; elsewhere use `peer_read` or `peer_wait`.
+It asks the Bridge to be told about messages for this peer, so it works on every machine and costs nothing while it waits.
 
 ### Consulting
 
