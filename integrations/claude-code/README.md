@@ -1,68 +1,48 @@
-# AI-Connect Claude Code Integration
+# AI-Connect Claude Code integration
 
-Erweitert Claude Code um den AI-Connect Berater-Modus (Salomo-Prinzip) für Multi-Agent-Konsens zwischen mehreren Claude-Instanzen.
+Extras for Claude Code on top of the AI-Connect MCP server: behaviour rules, a message watcher and the `/consult` command.
 
 ## Installation
 
-### 1. Slash-Command einbinden
+### 1. Register the MCP server
+
+See the [main README](../../README.md#setup): `claude mcp add` with the STDIO client, so every session joins as `Host:Project`.
+
+### 2. Include the behaviour rules
+
+Add one line to your global `~/.claude/CLAUDE.md` (or a project `CLAUDE.md`):
+
+```markdown
+@<absolute-path-to-repo>/integrations/claude-code/CLAUDE.md
+```
+
+Claude Code resolves `@` imports when it loads the file. The rules contain the path to the watcher (`~/Projekte/AI-Connect/...`); adjust it if your clone lives elsewhere.
+
+### 3. Install the slash command
 
 ```bash
 mkdir -p ~/.claude/commands
-ln -s "$(pwd)/commands/beratung.md" ~/.claude/commands/beratung.md
+ln -s "$(pwd)/commands/consult.md" ~/.claude/commands/consult.md
 ```
 
-Ein Symlink hält die Datei automatisch synchron mit dem Repo. Alternativ kopieren — dann musst du bei Updates manuell ziehen.
+A symlink keeps the command in sync with the repository; `git pull` is enough to update rules and command.
 
-### 2. Verhaltens-Regeln in CLAUDE.md einbinden
+## Usage
 
-Füge in deine globale `~/.claude/CLAUDE.md` (oder projektspezifische `CLAUDE.md`) folgende Zeile ein:
+### Waiting for messages while working on
 
-```markdown
-@<absoluter-pfad-zum-repo>/integrations/claude-code/CLAUDE.md
-```
-
-Beispiel:
-```markdown
-## AI-Connect Kommunikation
-@~/Projekte/AI-Connect/integrations/claude-code/CLAUDE.md
-```
-
-Claude Code löst `@`-Imports beim Laden auf — der Inhalt wird inline gerendert.
-
-### 3. AI-Connect MCP starten
-
-Stelle sicher dass:
-- Der Bridge-Server läuft (`server/main.py`)
-- Die MCP-Client-Config in `~/.config/ai-connect/config.yaml` existiert (siehe `config.yaml.example` im Repo-Root)
-- Claude Code die AI-Connect MCP registriert hat
-
-## Verwendung
-
-In Claude Code: `/beratung` aufrufen — startet die Long-Poll-Schleife (`peer_wait`).
-
-### Auf Nachrichten warten, während weitergearbeitet wird
-
-Eingehende Nachrichten wecken die Sitzung nicht. Den Wächter als Hintergrundaufgabe starten
-(Bash-Tool mit `run_in_background`):
+Incoming messages do not wake a session. Start the watcher as a background task (Bash tool with `run_in_background`):
 
 ```bash
 python3 ~/Projekte/AI-Connect/integrations/claude-code/aiconnect_watch.py
 ```
 
-Er endet bei der nächsten Nachricht an den eigenen Peer; das Ende der Hintergrundaufgabe weckt die
-Sitzung. Danach `peer_read`, antworten, Wächter neu starten. Details und Begründung: `CLAUDE.md`.
+It ends at the next message for its own peer; the finished background task wakes the session. Then `peer_read`, answer, restart the watcher. Details: [CLAUDE.md](CLAUDE.md).
+
+### Consulting
+
+`/consult` puts a session into a long-poll loop (`peer_wait`): it shows every incoming message, answers as a critical second opinion and leaves once both sides have sent `[LGTM]`. Use it in a session that has nothing else to do — while it waits it does not react to the user for up to 10 s at a time.
 
 Tags:
-- `[LGTM]` = Zustimmung / Handshake-Beitrag
-- `[WEITER]` = noch nicht fertig
-
-Rollen (Salomo-Prinzip):
-- **AIfred** = Hauptarbeiter mit User-Aufgabe (These)
-- **Sokrates** = Idle-Claude als Kritiker (Antithese)
-- **Salomo** = Dritter Claude als Richter bei Uneinigkeit (Synthese)
-
-## Updates ziehen
-
-Mit Symlinks: `git pull` im Repo reicht — Command und CLAUDE.md-Import sind automatisch aktuell.
-
-Ohne Symlinks: nach `git pull` die Dateien manuell neu nach `~/.claude/commands/` kopieren.
+- `[LGTM]` = agreement / handshake contribution
+- `[CONTINUE]` = not finished yet
