@@ -1,101 +1,57 @@
 # AI-Connect
 
-MCP-based communication bridge between AI coding assistants across different machines.
+An MCP server that lets AI coding assistants on different machines message each other, share code context and settle questions together — with the assistants themselves deciding when to talk.
 
-Works with any MCP-capable client (Claude Code, Claude Desktop, Cursor, VS Code, Codex CLI, …). Day-to-day use and testing so far: Claude Code, for which [integrations/claude-code/](integrations/claude-code/) adds a message watcher, the `/beratung` command and behaviour rules.
+Works with any MCP-capable client (Claude Code, Claude Desktop, Cursor, VS Code, Codex CLI, …). Day-to-day use and testing so far: Claude Code, for which [integrations/claude-code/](integrations/claude-code/) adds a message watcher, the `/consult` command and behaviour rules.
 
 [Deutsche Version / German Version](README_DE.md)
 
-## Overview
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    Mini-PC (192.168.0.252)                      │
-│                    Bridge Server (24/7)                         │
-│                                                                 │
-│  ┌───────────────────┐          ┌───────────────────┐           │
-│  │  MCP HTTP Server  │◄────────►│  Bridge Server    │           │
-│  │  Peer: "mini"     │ WebSocket│  Port 9999        │           │
-│  │  (localhost:9998) │          │                   │           │
-│  └───────────────────┘          └───────────────────┘           │
-└─────────────────────────────────────────────────────────────────┘
-                                         ▲
-                                         │ WebSocket (remote)
-                                         │
-                                 ┌───────┴───────┐
-                                 │ Main Machine  │
-                                 │ (WSL)         │
-                                 │               │
-                                 │ MCP HTTP      │
-                                 │ Server        │
-                                 │ Peer: "Aragon"│
-                                 └───────────────┘
-```
+> **Note:** AI-Connect works, but it is a pragmatic tool with limits set by how today's assistants work — see [Limitations](#limitations).
 
 ## Features
 
-- **Multi-Agent Communication**: AI assistants can exchange messages across machines
-- **Salomo Principle**: Multi-agent consensus for better decisions (AIfred/Sokrates/Salomo)
-- **Two transports**: STDIO per session (Claude Code, one peer per project) or a shared HTTP/SSE server for any other MCP client
-- **Offline Messages**: Messages are stored until the recipient comes online
-- **Project-based Peer Names**: `Host:Project`, e.g. `Mini:AIfred-Intelligence` or `Aragon:FreeEchoDot2`
-- **Message watcher**: a background task that wakes a Claude Code session when a message arrives, without polling
+- **Messages between assistants** across machines, to one peer or to everyone (`*`)
+- **Code context**: send a file excerpt along with a question
+- **Offline delivery**: messages wait in the Bridge until the recipient comes online
+- **One peer per Claude Code session**, named `Host:Project` (e.g. `Mini:AIfred-Intelligence`)
+- **Two ways in**: a STDIO client per session (Claude Code) or a shared HTTP/SSE server for any other MCP client
+- **Message watcher** that wakes a waiting Claude Code session when a message arrives, without polling
+- **Handshake protocol** (`[LGTM]` / `[CONTINUE]`) so both sides know when a discussion is finished
 
-> **Note:** This is an early/rough implementation. It works, but has limitations - see [Current Limitations](#current-limitations) below.
+## Why this exists
 
----
+Multi-agent frameworks define their agents in code, and orchestration tools hand out tasks from a central controller. AI-Connect does neither: it connects ordinary interactive sessions, each working on its own task on its own machine, and lets them reach each other peer-to-peer when they need to.
 
-## Why This Exists
+### Use cases
 
-After extensive research, we found no existing solution that allows **AI models to directly send messages to each other and coordinate autonomously** - in a simple, network-capable way where the AIs themselves decide when to communicate.
+- **Code review**: one session implements, another reviews critically
+- **Getting unstuck**: ask another session for a fresh look
+- **Client-server setups**: the session on the server and the one on the client agree on configs, ports and versions without copy-paste between windows
+- **Shared resources**: sessions on different projects coordinate who uses a GPU, a test machine or a deployment slot
 
-There are multi-agent frameworks (where you programmatically define agents in code) and orchestration tools (where a human or central controller assigns tasks). But nothing that lets multiple **interactive Claude Code sessions** talk to each other peer-to-peer across different machines, with the AIs deciding themselves when to ask for help or offer advice.
-
-AI-Connect fills this gap. It's simple, network-capable, and works. But it comes with limitations due to Claude Code's architecture.
-
-### Use Cases
-
-- **Code review**: One Claude works on implementation, another reviews critically
-- **Getting unstuck**: When one Claude hits a wall, ask another for a fresh perspective
-- **Client-Server setups**: Configuring distributed systems where server runs on one machine, client on another - the Claude instances can coordinate configs, check what software needs to be installed where, and keep everything in sync without manual copy-paste between sessions
-- **Multi-machine deployments**: Any scenario where you're working on related tasks across different computers
-
----
-
-## Concept
-
-- **Bridge Server**: Runs 24/7 on a dedicated machine, routes messages between peers (WebSocket, port 9999)
-- **MCP HTTP Server**: Runs on **every machine** where Claude Code should communicate (SSE, port 9998)
-- **Persistent Connection**: Each MCP HTTP Server maintains a permanent WebSocket connection to the Bridge Server
-
-**Important:** The Bridge Server machine also needs the MCP HTTP Server if you want to run Claude Code there!
+## How it works
 
 ```
-┌─────────────────────────────────────────┐
-│  Bridge Machine (e.g., Mini-PC)         │
-│                                         │
-│  ┌─────────────────┐  ┌──────────────┐  │
-│  │ Bridge Server   │  │ MCP HTTP     │  │
-│  │ Port 9999       │◄─┤ Server       │  │
-│  │ (routes msgs)   │  │ Port 9998    │  │
-│  └────────▲────────┘  └──────▲───────┘  │
-│           │                  │          │
-│           │                  └── Claude Code (local)
-│           │                             │
-└───────────┼─────────────────────────────┘
-            │ WebSocket
-            │
-┌───────────┼─────────────────────────────┐
-│  Other Machine (e.g., Workstation)      │
-│           │                             │
-│  ┌────────┴────────┐                    │
-│  │ MCP HTTP Server │◄── Claude Code     │
-│  │ Port 9998       │                    │
-│  └─────────────────┘                    │
-└─────────────────────────────────────────┘
+                 ┌──────────────────────────────┐
+                 │  Bridge machine (24/7)       │
+                 │  Bridge Server, port 9999    │
+                 │  routes + stores messages    │
+                 └──────▲───────────────▲───────┘
+                        │ WebSocket     │ WebSocket
+          ┌─────────────┴──────┐  ┌─────┴──────────────────┐
+          │  Machine A         │  │  Machine B             │
+          │                    │  │                        │
+          │  Claude Code       │  │  VS Code / Cursor / …  │
+          │  session ─ STDIO   │  │      │ HTTP/SSE        │
+          │  client per session│  │  MCP server, port 9998 │
+          │  (Host:Project)    │  │  (peer.name)           │
+          └────────────────────┘  └────────────────────────┘
 ```
 
----
+- **Bridge Server** runs on one machine and routes messages between all peers. It keeps the history in SQLite and holds messages for peers that are offline.
+- **STDIO client** (`client/server.py`): Claude Code starts one per session. It joins as `Host:Project` and leaves when the session ends.
+- **HTTP/SSE server** (`client/http_server.py`): a permanent service for clients that connect to a URL instead of starting a process. It joins as one peer under `peer.name` from the config.
+- The Bridge machine can run assistants too; it then simply is machine A or B as well.
 
 ## Setup
 
@@ -131,9 +87,9 @@ It asks for the Bridge machine's IP or hostname and installs `ai-connect-mcp.ser
 claude mcp add -s user ai-connect -- "$PWD/venv/bin/python" "$PWD/client/server.py"
 ```
 
-Run it in the AI-Connect directory. For the message watcher, the `/beratung` command and the behaviour rules, see [integrations/claude-code/README.md](integrations/claude-code/README.md).
+Run it in the AI-Connect directory. For the message watcher, the `/consult` command and the behaviour rules, see [integrations/claude-code/README.md](integrations/claude-code/README.md).
 
-**Other MCP clients** (VS Code, Cursor, Claude Desktop, …) connect to the HTTP/SSE server, which joins under `peer.name` from the config. In VS Code, `~/.config/Code/User/mcp.json` (remote: `~/.vscode-server/data/User/mcp.json`):
+**Other MCP clients** (VS Code, Cursor, Claude Desktop, …) connect to the HTTP/SSE server. In VS Code, `~/.config/Code/User/mcp.json` (remote: `~/.vscode-server/data/User/mcp.json`):
 
 ```json
 {
@@ -168,200 +124,93 @@ To skip tool confirmation dialogs, add to `~/.claude/settings.json`:
 
 Then restart the assistant so it loads the MCP server.
 
----
-
 ## Usage
 
-### Available MCP Tools
+### MCP tools
 
 | Tool | Description |
 |------|-------------|
 | `peer_list` | Shows all online peers |
-| `peer_send` | Sends message to peer (or `*` for broadcast) |
+| `peer_send` | Sends a message to a peer (or `*` for everyone) |
 | `peer_read` | Reads received messages |
-| `peer_wait` | Waits for new message (with timeout); blocks the own turn, see [Waiting for messages](#waiting-for-messages) |
-| `peer_history` | Shows chat history with peer |
+| `peer_wait` | Waits for a new message (with timeout); blocks the own turn, see [Waiting for messages](#waiting-for-messages) |
+| `peer_history` | Shows the conversation with a peer |
 | `peer_context` | Shares file context with other peers |
-| `peer_status` | Shows connection status to Bridge Server |
+| `peer_status` | Shows the connection to the Bridge Server |
 
 ### Examples
 
-**Check status:**
-> "Show me the AI-Connect status"
+You talk to your assistant as usual; it calls the tools:
 
-**Show peers:**
-> "Who is currently online?"
-
-**Send message:**
-> "Ask mini what they think about this approach"
-
-**With context:**
-> "Send mini the code from api.py lines 42-58"
-
-**Read messages:**
+> "Who is online?"
+>
+> "Ask Aragon:FreeEchoDot2 which port the firmware expects."
+>
+> "Send Mini:AIfred-Intelligence lines 42–58 of api.py and ask for a review."
+>
 > "Did anyone write to me?"
+>
+> "Ask everyone whether someone is using GPU 2 right now."
 
-**Broadcast:**
-> "Ask everyone if someone has time for a review"
+### Waiting for messages
 
----
-
-## Architecture
-
-```
-AI-Connect/
-├── server/                 # Bridge Server (runs on dedicated machine)
-│   ├── main.py             # Entry point
-│   ├── websocket_server.py # WebSocket handler
-│   ├── peer_registry.py    # Peer management (online/offline)
-│   └── message_store.py    # SQLite history + offline delivery
-│
-├── client/                 # MCP Client (runs on each machine)
-│   ├── http_server.py      # FastMCP HTTP/SSE Server
-│   ├── server.py           # FastMCP STDIO Server (Claude Code, one peer per session)
-│   ├── bridge_client.py    # Persistent WebSocket connection
-│   └── tools.py            # MCP Tools implementation
-│
-├── integrations/claude-code/
-│   ├── CLAUDE.md           # Rules for Claude Code (import via @ in ~/.claude/CLAUDE.md)
-│   ├── aiconnect_watch.py  # Message watcher (background task)
-│   └── commands/beratung.md # /beratung slash command (long-poll advisor loop)
-│
-├── config_loader.py        # Reads ~/.config/ai-connect/config.yaml (all services)
-├── config.yaml.example     # Example configuration
-├── requirements.txt        # Python dependencies
-└── install.sh              # Sets up venv, config, systemd services
-```
-
-### Key Details
-
-- **SSE Transport**: The MCP HTTP Server uses Server-Sent Events (SSE) for stable connections to VSCode/Claude Code.
-- **Project-based Peer Names**: The STDIO client registers as `Host:Project` (hostname and name of the working directory), e.g. `Mini:AIfred-Intelligence`. `AI_CONNECT_PEER_NAME` overrides it. The HTTP/SSE server uses `peer.name` from the config.
-- **One session per name**: When a second session registers under a name that is already online, the newer one takes over. The Bridge sends the older one `{"type": "replaced"}` and closes it; that client does not reconnect, so the two do not keep pushing each other out. Two Claude Code sessions in the same project directory share a name; close one or set `AI_CONNECT_PEER_NAME`.
-- **Offline Messages**: When a peer is offline, the Bridge Server stores messages in SQLite and delivers them when the peer comes back online.
-- **Heartbeat**: Client sends ping every 25 seconds, server removes inactive peers after 60 seconds.
-
----
-
-## Salomo Principle (Multi-Agent Consensus)
-
-AI-Connect enables the **Salomo Principle** for better decisions through multi-agent consensus.
-
-### Roles
-
-| Role | Description |
-|------|-------------|
-| **AIfred** | The one with the user's task (main worker, thesis) |
-| **Sokrates** | Idle Claude being consulted (critic, antithesis) |
-| **Salomo** | Third Claude in case of disagreement (judge, synthesis) |
-
-### Workflow
-
-1. AIfred works on task, encounters important decision
-2. Shares context via `peer_context` + question via `peer_send`
-3. Sokrates analyzes critically, shows alternatives
-4. On consensus: Continue. On disagreement: Salomo decides
-
-### Voting
-
-- **Majority (2/3)** for normal decisions
-- **Unanimous (3/3)** for critical architecture changes
-- **Tags:** `[LGTM]` = approval, `[CONTINUE]` = not finished yet
-
-### `/beratung` Command
-
-The slash command `integrations/claude-code/commands/beratung.md` starts advisor mode; see [integrations/claude-code/README.md](integrations/claude-code/README.md) for installation. The instance waits for messages with `peer_wait` (long-poll, returns as soon as a message arrives). **Important:** All sent and received messages are displayed to the user - you can read the full conversation between the AI instances.
-
-### Waiting for Messages
-
-Incoming messages do not wake a Claude Code session. While an agreement with another peer is open and the session keeps working, start the watcher as a background task (Bash tool with `run_in_background`):
+Incoming messages do not wake a Claude Code session. While an exchange is open and the session keeps working, start the watcher as a background task (Bash tool with `run_in_background`):
 
 ```bash
-python3 ~/Projekte/AI-Connect/integrations/claude-code/aiconnect_watch.py
+python3 <path-to-AI-Connect>/integrations/claude-code/aiconnect_watch.py
 ```
 
-It takes the peer name from the session's own MCP client (not from the shell's current directory, which may be a worktree) and prints it at start; a name given as first argument takes precedence. It reads the Bridge's `messages.db` read-only every 5 seconds and exits as soon as a new message for this peer (or `*`) arrives. The finished background task wakes the session, which then calls `peer_read` and restarts the watcher. It never connects to the Bridge, so it cannot take over the peer name. `peer_wait` blocks the own turn (no reaction to the user meanwhile), so use it only when there is nothing else to do, as in `/beratung`; do not loop it from a helper agent, which costs tokens every round.
+It reads the Bridge's message database read-only every 5 seconds and exits as soon as a new message for its own peer (or `*`) arrives. The finished background task wakes the session, which then calls `peer_read` and restarts the watcher. It takes the peer name from the session's own MCP client (not from the shell's directory, which may be a worktree) and never connects to the Bridge itself.
 
----
+`peer_wait` blocks the own turn (no reaction to the user meanwhile), so use it only when there is nothing else to do, as in `/consult`.
 
-## Troubleshooting
+### Consulting another session
 
-### Check Bridge Server
+`/consult` (Claude Code) puts a session into a long-poll loop: it shows every incoming message, answers as a critical second opinion, and leaves once both sides have sent `[LGTM]`. `[CONTINUE]` keeps a discussion open. Every message in both directions is shown to the user.
 
-```bash
-# Service status
-sudo systemctl status ai-connect
+## Details
 
-# Live logs
-journalctl -u ai-connect -f
+- **Peer names**: the STDIO client joins as `Host:Project` (hostname and name of the working directory). The HTTP/SSE server uses `peer.name` from the config. `AI_CONNECT_PEER_NAME` overrides both.
+- **One session per name**: when a second session joins under a name that is already online, the newer one takes over; the Bridge tells the older one it was replaced, and that one does not reconnect. Two Claude Code sessions in the same project directory therefore share a name — close one or set `AI_CONNECT_PEER_NAME`.
+- **Offline messages**: stored in SQLite on the Bridge and delivered when the peer comes back.
+- **Heartbeat**: clients ping every 25 seconds; every 60 seconds the Bridge pings all peers, dropping those whose connection is dead or that have been silent for 5 minutes.
 
-# Check port
-ss -tlnp | grep 9999
-```
+## Configuration
 
-### Test connection
-
-```bash
-# From any machine
-nc -zv 192.168.0.252 9999
-```
-
-### Check MCP Client
-
-```bash
-# List MCP servers
-claude mcp list
-
-# Client logs
-tail -f ~/.config/ai-connect/mcp.log
-```
-
-### Common Problems
-
-| Problem | Cause | Solution |
-|---------|-------|----------|
-| "Not connected" | Wrong host config | On client machines `bridge.host` must be the Bridge machine's IP, not `0.0.0.0` |
-| Peers don't see each other | MCP Client not persistent | Update code (`git pull`), restart VS Code |
-| Connection refused | Bridge Server not running | `sudo systemctl start ai-connect` |
-| Timeout | Firewall blocking | Open port 9999 in firewall |
-
----
-
-## Config Reference
-
-### ~/.config/ai-connect/config.yaml
-
-Written by `install.sh`; every key is required, and a missing file stops each service with a message. Annotated template: [config.yaml.example](config.yaml.example).
+`~/.config/ai-connect/config.yaml` is written by `install.sh`. Every key is required; a missing file or key stops each service with a message. Annotated template: [config.yaml.example](config.yaml.example).
 
 `bridge.host` means two things: on the Bridge machine the address it listens on (`0.0.0.0`, reachable from the network), on every other machine the IP of the Bridge machine.
 
-### Environment Variables
-
-| Variable | Description |
-|----------|-------------|
+| Environment variable | Description |
+|----------------------|-------------|
 | `AI_CONNECT_PEER_NAME` | Overrides the peer name (`peer.name` for the HTTP/SSE server, `Host:Project` for the STDIO client) |
 
----
+## Troubleshooting
 
-## Current Limitations
+```bash
+./install.sh --status                 # services, config, peer name
+journalctl -u ai-connect -f           # Bridge log (Bridge machine)
+journalctl -u ai-connect-mcp -f       # HTTP/SSE server log
+tail -f ~/.config/ai-connect/mcp.log  # STDIO client log (Claude Code)
+nc -zv <bridge-ip> 9999               # is the Bridge reachable?
+claude mcp list                       # is ai-connect registered and connected?
+```
 
-This is an early/rough implementation. It works, but is far from elegant:
+| Problem | Cause | Solution |
+|---------|-------|----------|
+| "Not connected" | Wrong `bridge.host` | On client machines it must be the Bridge machine's IP, not `0.0.0.0` |
+| Connection refused | Bridge not running | `sudo systemctl start ai-connect` on the Bridge machine |
+| Timeout | Firewall | Open port 9999 on the Bridge machine |
+| A session keeps losing its connection | Two sessions with the same name | Close one, or set `AI_CONNECT_PEER_NAME` |
 
-- **No wake-up on message**: Claude Code has no external trigger mechanism, so an incoming message does not wake a session. The [message watcher](#waiting-for-messages) works around this: as a background task it ends when a message arrives, and a finished background task does wake the session. Without it, an instance has to call `peer_read` or wait in `peer_wait`.
+## Limitations
 
-- **No external triggers possible**: We thoroughly investigated Claude Code's [hooks system](https://code.claude.com/docs/en/hooks). The `UserPromptSubmit` hook can inject context, but only when the user sends a message - so you'd still need to type something for messages to arrive. There is simply no way to externally interrupt or signal a running Claude Code session. This is a fundamental limitation of the current Claude Code architecture.
+- **No wake-up on message**: an incoming message does not wake a Claude Code session. The [watcher](#waiting-for-messages) works around this between turns; a turn that is already running is not interrupted, the message is picked up when it ends.
+- **No external trigger**: Claude Code's [hooks](https://code.claude.com/docs/en/hooks) can inject context only when the user sends something; there is no way to signal a running session from outside.
+- **Manual context**: assistants share code only when they call `peer_context`; nobody automatically knows what the others are working on.
+- **Linux with systemd** for the services; other platforms need the services set up by hand.
 
-- **No interrupt of a running turn**: The watcher wakes a session between turns. A turn that is already running is not interrupted; the message is picked up when it ends.
-
-- **Manual context sharing**: You need to explicitly use `peer_context` to share code. There's no automatic awareness of what other instances are working on.
-
-### The Core Problem
-
-Until Claude Code (or Anthropic) implements external trigger/interrupt capabilities, true real-time multi-agent collaboration remains a workaround. The watcher removes the idle polling and its token cost, but a message still waits for the current turn to end.
-
-Pull requests welcome if you find a better approach!
-
----
+Pull requests are welcome if you find a better approach.
 
 ## Star History
 

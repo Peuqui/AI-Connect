@@ -1,64 +1,54 @@
-# AI-Connect Regeln für Claude Code
+# AI-Connect rules for Claude Code
 
-Diese Datei enthält die Verhaltens- und Protokoll-Regeln für die Nutzung der AI-Connect MCP zwischen mehreren Claude-Instanzen. Per `@-Import` in `~/.claude/CLAUDE.md` einbinden.
+Behaviour and protocol rules for using the AI-Connect MCP between several Claude Code sessions. Include this file in `~/.claude/CLAUDE.md` via `@` import.
 
-## Allgemein
+## General
 
-- **Regelmäßig `peer_read` aufrufen während der Arbeit** um Nachrichten von anderen KI-Assistenten zu empfangen
-- Bei längeren Aufgaben: Zwischendurch auf Nachrichten prüfen
-- Peer-Namen haben Format `Host:Projekt` (z.B. `Mini:AIfred-Intelligence`, `Aragon:FreeEchoDot2`) — bei `peer_send(to=...)` vollständig angeben
-- **Kein permanentes Polling** — nur bei aktiver Kommunikation oder auf User-Anweisung
-- **KEINE Desktop-Benachrichtigungen** auslösen
-- **Vollständige Transparenz**: JEDE Peer-Kommunikation (eingehend UND ausgehend) muss als Text für den User ausgegeben werden — `peer_send`, `peer_context`, empfangene Nachrichten, Handshakes. Der User muss alle Inter-Agent-Kommunikation mitlesen können.
+- Peer names have the form `Host:Project` (e.g. `Mini:AIfred-Intelligence`, `Aragon:FreeEchoDot2`) — always give the full name in `peer_send(to=...)`.
+- **No permanent polling** — check for messages only during an active exchange or when the user asks.
+- **No desktop notifications.**
+- **Full transparency**: show EVERY peer communication (incoming AND outgoing) to the user as text — `peer_send`, `peer_context`, received messages, handshakes. The user must be able to read all communication between the assistants.
 
-## Auf Nachrichten warten: Wächter statt Polling
+## Waiting for messages: watcher instead of polling
 
-Claude Code wird von eingehenden Peer-Nachrichten **nicht** geweckt. Während eine Absprache
-offen ist (Messfenster, GPU-Belegung, Rückfrage an einen Peer), den Wächter als
-**Hintergrundaufgabe** starten (Bash mit `run_in_background`):
+Incoming peer messages do **not** wake a Claude Code session. While an exchange is open (a measurement window, a shared resource, a question to a peer), start the watcher as a **background task** (Bash with `run_in_background`):
 
 ```bash
 python3 ~/Projekte/AI-Connect/integrations/claude-code/aiconnect_watch.py
 ```
 
-- Er liest alle 5 s **nur lesend** `~/.config/ai-connect/messages.db` und beendet sich, sobald eine
-  neue Nachricht an den eigenen Peer (oder `*`) eingeht. Das Ende der Hintergrundaufgabe weckt die
-  Sitzung; dann `peer_read`, antworten, Wächter neu starten.
-- Den Peer-Namen liest er vom MCP-Client der eigenen Sitzung ab, unabhängig davon, in welchem
-  Verzeichnis die Shell gerade steht (Worktrees!), und gibt ihn beim Start aus: prüfen, dass es der
-  eigene ist. Ein Name als erstes Argument hat Vorrang.
-- **Nicht** mit `peer_wait` in einer Schleife warten (blockiert die eigene Runde, keine Reaktion auf
-  den User) und **keinen** Hilfsagenten mit `peer_wait` starten (kostet pro Warterunde Tokens und holt
-  die Nachricht selbst ab). `peer_wait` nur, wenn ohnehin auf nichts anderes zu reagieren ist, z. B.
-  in `/beratung`.
-- Der Wächter meldet sich nicht an der Bridge an und kann deshalb keinen Namenskonflikt auslösen.
-- **Zwei Sitzungen im selben Projektverzeichnis** tragen denselben Peer-Namen; die neuere übernimmt,
-  die ältere wird getrennt. Eine davon schließen (oder `AI_CONNECT_PEER_NAME` setzen).
+(Adjust the path to where the repository lives.)
 
-## Handshake-Protokoll
+- It reads `~/.config/ai-connect/messages.db` **read-only** every 5 s and exits as soon as a new message for its own peer (or `*`) arrives. The finished background task wakes the session; then `peer_read`, answer, restart the watcher.
+- It takes the peer name from the session's own MCP client, regardless of the shell's current directory (worktrees!), and prints it at start: check that it is your own. A name given as first argument takes precedence.
+- Do **not** wait with `peer_wait` in a loop (it blocks your own turn, no reaction to the user) and do **not** start a helper agent with `peer_wait` (costs tokens every round and fetches the message itself). Use `peer_wait` only when there is nothing else to react to, as in `/consult`.
+- The watcher never connects to the Bridge, so it cannot cause a name conflict.
+- **Two sessions in the same project directory** share a peer name; the newer one takes over and the older one is disconnected. Close one of them (or set `AI_CONNECT_PEER_NAME`).
 
-Wenn eine gemeinsame Aufgabe mit einem anderen Peer abgeschlossen ist:
+## Handshake protocol
 
-1. **Zusammenfassung senden** — was wurde erledigt, was ist der aktuelle Stand
-2. **Fragen ob noch was anliegt** — "Liegt bei dir noch was an?"
-3. **Auf Bestätigung warten** — Peer antwortet mit `[LGTM]`, `[WEITER]` oder inhaltlich
-4. **Beide gehen raus** — sobald beidseitiger `[LGTM]`-Austausch komplett ist
-5. **Nicht auf User-Anweisung warten** — proaktiv Handshake initiieren wenn Aufgabe erledigt
+When a joint task with another peer is done:
 
-### Symmetrische Handshake-Invariante
+1. **Send a summary** — what was done, what the current state is.
+2. **Ask whether anything is left** — "Anything else on your side?"
+3. **Wait for the answer** — the peer replies with `[LGTM]`, `[CONTINUE]` or with content.
+4. **Both leave** — as soon as the `[LGTM]` exchange is complete on both sides.
+5. **Do not wait for the user** — start the handshake yourself when the task is done.
 
-**Schleife verlassen wenn beide Bedingungen erfüllt sind:**
-1. Ich habe selbst `[LGTM]` gesendet, UND
-2. Ich habe vom Gegenüber `[LGTM]` empfangen
+### Symmetric handshake invariant
 
-Reihenfolge egal.
+**Leave the loop when both are true:**
+1. You have sent `[LGTM]` yourself, AND
+2. You have received `[LGTM]` from the other side.
 
-**`[LGTM]` vom Empfänger ist OPTIONAL** — wenn dir bei einem eingehenden `[LGTM]` noch was offen ist (Rückfrage, Bedenken, Detail), antworte mit `[WEITER]` oder inhaltlich. Nicht aus Gefälligkeit `[LGTM]` schicken.
+Order does not matter.
+
+**Sending `[LGTM]` back is OPTIONAL** — if something is still open when an `[LGTM]` arrives (a question, a concern, a detail), answer with `[CONTINUE]` or with content. Never send `[LGTM]` out of politeness.
 
 ### Tags
-- `[LGTM]` = Zustimmung / Handshake-Beitrag
-- `[WEITER]` = noch nicht fertig, Diskussion offen halten
+- `[LGTM]` = agreement / handshake contribution
+- `[CONTINUE]` = not finished, keep the discussion open
 
-## Slash-Command
+## Slash command
 
-`/beratung` startet die Long-Poll-Schleife (`peer_wait`) für aktive Beratungs-Sessions. Siehe `integrations/claude-code/commands/beratung.md`.
+`/consult` starts the long-poll loop (`peer_wait`) for an active consultation. See `commands/consult.md`.

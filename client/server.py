@@ -121,7 +121,7 @@ async def peer_wait(timeout: int = 60) -> str:
     Runde: währenddessen keine Reaktion auf den User. Für Absprachen, bei
     denen nebenher weitergearbeitet wird, stattdessen den Wächter als
     Hintergrundaufgabe starten (siehe peer_read); peer_wait nur, wenn es
-    sonst nichts zu tun gibt (z. B. /beratung). Nicht in einer Schleife
+    sonst nichts zu tun gibt (z. B. /consult). Nicht in einer Schleife
     aus einem Hilfsagenten aufrufen, das kostet pro Runde Tokens.
 
     Args:

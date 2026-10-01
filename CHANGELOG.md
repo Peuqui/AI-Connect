@@ -1,5 +1,21 @@
 # Changelog
 
+## [Unreleased] - 2026-10-01
+
+### Added
+- `requirements.txt` as the single list of dependencies; `install.sh` installs from it (`aiosqlite` was missing, the Bridge crashed on fresh machines)
+- `config_loader.py`: one config loader for the Bridge and both MCP clients
+
+### Changed
+- A missing config file or key stops every service with a message; the silent defaults (including a hard-coded Bridge IP) are gone
+- `install.sh` speaks English, writes the PolicyKit rule for the installing user instead of a fixed one, asks clients for the Bridge address and suggests `0.0.0.0` as the Bridge's listen address (`127.0.0.1` locked out every other machine); it ends with the ready `claude mcp add` line
+- `/beratung` renamed to `/consult` and rewritten in English, as are the Claude Code rules and the integration README; tag `[WEITER]` is now `[CONTINUE]`
+- README (EN/DE) rewritten: setup via `install.sh`, Claude Code via the STDIO client, current architecture diagram, corrected heartbeat timings
+
+### Removed
+- The "Salomo Principle" (AIfred/Sokrates/Salomo roles, 2/3 voting) from docs and command: nothing in AI-Connect implemented it
+- `pyproject.toml`: unused, its entry point named a module that does not exist
+
 ## [Unreleased] - 2026-09-28
 
 ### Added
@@ -9,7 +25,7 @@
 ### Changed
 - `aiconnect_watch.py` takes the peer name from the session's MCP client instead of the shell's current directory, prints it at start and exits with an error when it cannot tell (a watcher started from a worktree listened for the wrong name)
 - A second session with the same peer name takes over; the Bridge sends the older one `replaced` and it stops reconnecting (was: the two pushed each other out every ~27 s)
-- Docs: peer names are `Host:Project`; `/advisor` skill replaced by the `/beratung` command
+- Docs: peer names are `Host:Project`; `/advisor` skill replaced by the `/beratung` command (now `/consult`)
 
 ### Fixed
 - Duplicate entries in the client's peer list after re-registrations
