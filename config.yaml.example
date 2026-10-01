@@ -13,7 +13,6 @@ peer:
   # (Claude Code) names itself "Hostname:Project" instead, e.g.
   # Mini:AIfred-Intelligence. AI_CONNECT_PEER_NAME overrides both.
   name: "my-machine"
-  auto_connect: true
 
 mcp:
   # Address of the local HTTP/SSE server for MCP clients

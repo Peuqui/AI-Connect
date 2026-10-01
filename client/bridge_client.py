@@ -1,60 +1,45 @@
-"""WebSocket Client für Verbindung zum AI-Connect Bridge Server."""
+"""WebSocket client that connects an MCP server to the AI-Connect Bridge."""
 
 import asyncio
 import json
 import logging
-from typing import Optional, Callable
-from pathlib import Path
+from typing import Optional
 
 import websockets
 from websockets import ClientConnection
 
 logger = logging.getLogger(__name__)
 
+# How long a request to the Bridge (peer list, history) may take
+REQUEST_TIMEOUT_SECONDS = 5.0
+PING_INTERVAL_SECONDS = 25
+
 
 class BridgeClient:
-    """Verbindet sich zum Bridge Server und verwaltet Kommunikation."""
+    """Keeps the connection to the Bridge Server and queues incoming messages."""
 
-    def __init__(
-        self,
-        host: str = "192.168.0.252",
-        port: int = 9999,
-        peer_name: str = "default",
-        project: Optional[str] = None
-    ):
+    def __init__(self, host: str, port: int, peer_name: str):
         self.host = host
         self.port = port
-        self._base_name = peer_name  # Original-Name für Registrierung
-        self.peer_name = peer_name   # Kann vom Server überschrieben werden
-        self.project = project or self._detect_project()
+        self.peer_name = peer_name
 
         self._ws: Optional[ClientConnection] = None
         self._connected = False
         self._reconnecting = False
-        self._should_reconnect = True  # Auto-Reconnect aktiviert
+        self._should_reconnect = True
         self._message_queue: list[dict] = []
         self._message_event: Optional[asyncio.Event] = None
-        self._peers: list[dict] = []
-        self._on_message: Optional[Callable] = None
-        self._reconnect_task: Optional[asyncio.Task] = None
+        # Answers to requests, keyed by the response type ("peer_list", "history")
+        self._pending: dict[str, asyncio.Future] = {}
         self._receive_task: Optional[asyncio.Task] = None
         self._ping_task: Optional[asyncio.Task] = None
+        self._reconnect_task: Optional[asyncio.Task] = None
 
     def _ensure_event(self) -> asyncio.Event:
-        """Lazy-init des Message-Events im aktuellen Event-Loop."""
+        """Create the message event lazily inside the running event loop."""
         if self._message_event is None:
             self._message_event = asyncio.Event()
         return self._message_event
-
-    def _detect_project(self) -> str:
-        """Erkennt das aktuelle Projekt basierend auf cwd.
-
-        Gibt immer einen Namen zurück:
-        - Git-Repo: Repository-Name
-        - Sonst: Verzeichnisname
-        """
-        cwd = Path.cwd()
-        return cwd.name
 
     @property
     def connected(self) -> bool:
@@ -64,81 +49,49 @@ class BridgeClient:
     def reconnecting(self) -> bool:
         return self._reconnecting
 
-    @property
-    def peers(self) -> list[dict]:
-        return self._peers.copy()
-
-    @property
-    def messages(self) -> list[dict]:
-        return self._message_queue.copy()
-
-    def on_message(self, callback: Callable) -> None:
-        """Registriert Callback für eingehende Nachrichten."""
-        self._on_message = callback
-
     async def connect(self) -> bool:
-        """Verbindet zum Bridge Server."""
+        """Connect to the Bridge and register under peer_name."""
+        uri = f"ws://{self.host}:{self.port}"
         try:
-            uri = f"ws://{self.host}:{self.port}"
-            # Längere Timeouts für stabilere Verbindungen
-            # Ping alle 60s, Timeout nach 300s (5 Minuten)
             self._ws = await websockets.connect(uri, ping_interval=60, ping_timeout=300)
-            self._connected = True
-            self._reconnecting = False
-
-            # Registrieren - immer den Original-Namen senden, nicht den zugewiesenen
-            await self._send({
-                "type": "register",
-                "name": self._base_name,
-                "project": self.project
-            })
-
-            # Alte Tasks canceln falls vorhanden
-            if self._receive_task and not self._receive_task.done():
-                self._receive_task.cancel()
-            if self._ping_task and not self._ping_task.done():
-                self._ping_task.cancel()
-
-            # Empfangs-Loop starten
-            self._receive_task = asyncio.create_task(self._receive_loop())
-            # Ping-Loop starten
-            self._ping_task = asyncio.create_task(self._ping_loop())
-
-            logger.info(f"Verbunden mit Bridge: {uri}")
-            return True
-
-        except Exception as e:
-            logger.error(f"Verbindung fehlgeschlagen: {e}")
+        except (OSError, websockets.exceptions.InvalidHandshake) as e:
+            logger.error(f"Cannot reach Bridge at {uri}: {e}")
             self._connected = False
             return False
 
+        self._connected = True
+        self._reconnecting = False
+        await self._send({"type": "register", "name": self.peer_name})
+
+        for task in (self._receive_task, self._ping_task):
+            if task and not task.done():
+                task.cancel()
+        self._receive_task = asyncio.create_task(self._receive_loop())
+        self._ping_task = asyncio.create_task(self._ping_loop())
+
+        logger.info(f"Connected to Bridge at {uri} as '{self.peer_name}'")
+        return True
+
     async def disconnect(self) -> None:
-        """Trennt die Verbindung."""
+        """Close the connection and stop reconnecting."""
         self._connected = False
-        self._should_reconnect = False  # Auto-Reconnect deaktivieren
-
-        # Tasks stoppen
-        if self._reconnect_task and not self._reconnect_task.done():
-            self._reconnect_task.cancel()
-        if self._receive_task and not self._receive_task.done():
-            self._receive_task.cancel()
-        if self._ping_task and not self._ping_task.done():
-            self._ping_task.cancel()
-
+        self._should_reconnect = False
+        for task in (self._reconnect_task, self._receive_task, self._ping_task):
+            if task and not task.done():
+                task.cancel()
         if self._ws:
             await self._ws.close()
             self._ws = None
 
-    async def send_message(
-        self,
-        to: str,
-        content: str,
-        context: Optional[dict] = None
-    ) -> bool:
-        """Sendet eine Nachricht an einen Peer."""
+    def start_reconnect(self) -> None:
+        """Keep trying to reach the Bridge in the background."""
+        if self._should_reconnect and not self._reconnecting:
+            self._reconnect_task = asyncio.create_task(self._reconnect())
+
+    async def send_message(self, to: str, content: str, context: Optional[dict] = None) -> bool:
+        """Send a message to a peer (or '*' for every online peer)."""
         if not self._connected:
             return False
-
         return await self._send({
             "type": "message",
             "to": to,
@@ -147,77 +100,63 @@ class BridgeClient:
         })
 
     async def list_peers(self) -> list[dict]:
-        """Fragt die Liste der online Peers ab."""
-        if not self._connected:
-            return []
+        """Ask the Bridge for the peers that are online."""
+        response = await self._request({"type": "list_peers"}, "peer_list")
+        return response.get("peers", [])
 
-        await self._send({"type": "list_peers"})
-        # Warte kurz auf Antwort
-        await asyncio.sleep(0.5)
-        return self._peers
-
-    async def get_history(self, peer: str, limit: int = 50) -> list[dict]:
-        """Holt den Chatverlauf mit einem Peer."""
-        if not self._connected:
-            return []
-
-        await self._send({
-            "type": "history",
-            "peer": peer,
-            "limit": limit
-        })
-        # Warte auf Antwort
-        await asyncio.sleep(0.5)
-        # Hier müssten wir eigentlich auf die Antwort warten
-        # Vereinfacht: Antwort kommt über _receive_loop
-        return []
+    async def get_history(self, peer: str, limit: int) -> list[dict]:
+        """Ask the Bridge for the conversation with a peer, oldest first."""
+        response = await self._request({"type": "history", "peer": peer, "limit": limit}, "history")
+        return response.get("messages", [])
 
     def pop_messages(self) -> list[dict]:
-        """Holt und leert die Nachrichtenwarteschlange."""
+        """Return and clear the received messages."""
         messages = self._message_queue.copy()
         self._message_queue.clear()
         if self._message_event is not None:
             self._message_event.clear()
         return messages
 
-    async def wait_for_messages(self, timeout: float = 60.0) -> list[dict]:
-        """Wartet bis neue Nachrichten ankommen oder Timeout greift.
+    async def wait_for_messages(self, timeout: float) -> list[dict]:
+        """Wait until messages arrive or the timeout passes, then return them.
 
-        Returnt sofort wenn Queue bereits gefüllt ist. Sonst blockiert
-        es bis _receive_loop das Event setzt oder timeout Sekunden
-        vergehen. Leert die Queue beim Returnen.
+        Returns at once when messages are already queued.
         """
         if not self._message_queue:
-            event = self._ensure_event()
             try:
-                await asyncio.wait_for(event.wait(), timeout=timeout)
+                await asyncio.wait_for(self._ensure_event().wait(), timeout=timeout)
             except asyncio.TimeoutError:
                 return []
         return self.pop_messages()
 
+    async def _request(self, data: dict, response_type: str) -> dict:
+        """Send a request and wait for the Bridge's answer of response_type."""
+        future: asyncio.Future = asyncio.get_running_loop().create_future()
+        self._pending[response_type] = future
+        try:
+            if not await self._send(data):
+                raise ConnectionError("Not connected to the Bridge")
+            return await asyncio.wait_for(future, timeout=REQUEST_TIMEOUT_SECONDS)
+        finally:
+            self._pending.pop(response_type, None)
+
     async def _send(self, data: dict) -> bool:
-        """Sendet JSON-Daten über WebSocket."""
+        """Send JSON over the WebSocket; a lost connection starts a reconnect."""
         if not self._ws:
-            # Verbindung verloren - Reconnect triggern
-            if self._should_reconnect and not self._reconnecting:
-                asyncio.create_task(self._reconnect())
+            self.start_reconnect()
             return False
         try:
             await self._ws.send(json.dumps(data))
             return True
         except websockets.exceptions.ConnectionClosed:
-            logger.warning("Verbindung beim Senden verloren")
+            logger.warning("Connection lost while sending")
             self._connected = False
             self._ws = None
-            if self._should_reconnect and not self._reconnecting:
-                asyncio.create_task(self._reconnect())
-            return False
-        except Exception as e:
-            logger.error(f"Senden fehlgeschlagen: {e}")
+            self.start_reconnect()
             return False
 
     async def _receive_loop(self) -> None:
-        """Empfängt und verarbeitet eingehende Nachrichten."""
+        """Handle everything the Bridge sends."""
         ws = self._ws
         if ws is None:
             return
@@ -225,126 +164,90 @@ class BridgeClient:
             async for raw in ws:
                 try:
                     data = json.loads(raw)
-                    msg_type = data.get("type")
-
-                    if msg_type == "message":
-                        self._message_queue.append(data)
-                        self._ensure_event().set()
-                        if self._on_message:
-                            await self._on_message(data)
-
-                    elif msg_type == "unread":
-                        for msg in data.get("messages", []):
-                            self._message_queue.append(msg)
-                        if data.get("messages"):
-                            self._ensure_event().set()
-
-                    elif msg_type == "peer_list":
-                        self._peers = data.get("peers", [])
-
-                    elif msg_type == "peer_joined":
-                        peer = data.get("peer", {})
-                        # Neuanmeldung ersetzt einen Peer ohne peer_left,
-                        # daher ein Eintrag pro Name.
-                        self._peers = [
-                            p for p in self._peers if p.get("name") != peer.get("name")
-                        ]
-                        self._peers.append(peer)
-                        logger.info(f"Peer beigetreten: {peer.get('name')}")
-
-                    elif msg_type == "peer_left":
-                        peer_name = data.get("peer")
-                        self._peers = [p for p in self._peers if p.get("name") != peer_name]
-                        logger.info(f"Peer gegangen: {peer_name}")
-
-                    elif msg_type == "registered":
-                        # Server hat uns einen Namen zugewiesen
-                        assigned_name = data.get("name")
-                        if assigned_name and assigned_name != self.peer_name:
-                            logger.info(f"Server hat Namen zugewiesen: {assigned_name} (angefragt: {self.peer_name})")
-                            self.peer_name = assigned_name
-
-                    elif msg_type == "replaced":
-                        # Eine andere Sitzung hat unseren Namen übernommen;
-                        # ein Reconnect würde sie nur wieder verdrängen.
-                        logger.warning(
-                            f"Peer-Name '{self.peer_name}' von einer anderen "
-                            "Sitzung übernommen, kein Auto-Reconnect"
-                        )
-                        self._should_reconnect = False
-
-                    elif msg_type == "pong":
-                        pass  # Heartbeat-Antwort
-
                 except json.JSONDecodeError:
-                    logger.warning("Ungültige JSON-Nachricht empfangen")
-
+                    logger.warning("Received invalid JSON from the Bridge")
+                    continue
+                self._handle(data)
         except websockets.exceptions.ConnectionClosed:
             pass
-        # Ein sauberes Schließen durch den Server beendet die Schleife ohne
-        # Exception, daher wird der Zustand hier für beide Fälle zurückgesetzt.
-        logger.warning("Verbindung zum Bridge Server verloren")
+        # A clean close by the Bridge ends the loop without an exception, so
+        # the state is reset here for both cases.
+        logger.warning("Connection to the Bridge lost")
         self._connected = False
         self._ws = None
-        if self._should_reconnect and not self._reconnecting:
-            asyncio.create_task(self._reconnect())
+        self.start_reconnect()
+
+    def _handle(self, data: dict) -> None:
+        """Dispatch one message from the Bridge."""
+        msg_type = data.get("type")
+
+        if msg_type == "message":
+            self._message_queue.append(data)
+            self._ensure_event().set()
+
+        elif msg_type == "unread":
+            messages = data.get("messages", [])
+            self._message_queue.extend(messages)
+            if messages:
+                self._ensure_event().set()
+
+        elif msg_type in self._pending:
+            future = self._pending[msg_type]
+            if not future.done():
+                future.set_result(data)
+
+        elif msg_type == "peer_joined":
+            logger.info(f"Peer joined: {data.get('peer', {}).get('name')}")
+
+        elif msg_type == "peer_left":
+            logger.info(f"Peer left: {data.get('peer')}")
+
+        elif msg_type == "replaced":
+            # Another session took over our name; reconnecting would only
+            # push it out again.
+            logger.warning(f"Peer name '{self.peer_name}' taken over by another session, not reconnecting")
+            self._should_reconnect = False
+
+        elif msg_type == "error":
+            logger.error(f"Bridge reported an error: {data.get('error')}")
 
     async def _ping_loop(self) -> None:
-        """Sendet regelmäßig Pings."""
+        """Tell the Bridge regularly that this peer is alive."""
         while self._connected:
-            await asyncio.sleep(25)
+            await asyncio.sleep(PING_INTERVAL_SECONDS)
             if self._connected:
                 await self._send({"type": "ping"})
 
     async def _reconnect(self) -> None:
-        """Versucht Wiederverbindung mit exponential backoff."""
-        if self._reconnecting:
-            return  # Bereits ein Reconnect aktiv
-
+        """Reconnect with exponential backoff, capped at 30 seconds."""
         self._reconnecting = True
-        delay: float = 2  # Start mit 2 Sekunden
-        max_delay = 30  # Maximal 30 Sekunden warten
+        delay: float = 2
         attempt = 0
-
         while not self._connected and self._should_reconnect:
             attempt += 1
-            logger.info(f"Reconnect Versuch {attempt} in {delay}s...")
+            logger.info(f"Reconnect attempt {attempt} in {delay:.0f} s")
             await asyncio.sleep(delay)
-
-            if not self._should_reconnect:
+            if self._should_reconnect and await self.connect():
+                logger.info(f"Reconnected after {attempt} attempts")
                 break
-
-            try:
-                if await self.connect():
-                    logger.info(f"Reconnect erfolgreich nach {attempt} Versuchen")
-                    break
-            except Exception as e:
-                logger.error(f"Reconnect fehlgeschlagen: {e}")
-
-            # Exponential backoff
-            delay = min(delay * 1.5, max_delay)
-
+            delay = min(delay * 1.5, 30)
         self._reconnecting = False
 
 
-# Globale Instanz für MCP Tools
+# The one client of this MCP server process, used by the tools
 _client: Optional[BridgeClient] = None
 
 
 def get_client() -> Optional[BridgeClient]:
-    """Gibt die globale Client-Instanz zurück."""
+    """Return this process's Bridge client."""
     return _client
 
 
-async def init_client(
-    host: str = "192.168.0.252",
-    port: int = 9999,
-    peer_name: str = "default"
-) -> BridgeClient:
-    """Initialisiert und verbindet den globalen Client."""
+async def init_client(host: str, port: int, peer_name: str) -> BridgeClient:
+    """Create the Bridge client and connect; if the Bridge is unreachable,
+    keep trying in the background."""
     global _client
     _client = BridgeClient(host=host, port=port, peer_name=peer_name)
-    await _client.connect()
+    if not await _client.connect():
+        _client.start_reconnect()
     return _client
-
-

@@ -31,13 +31,13 @@ A symlink keeps the command in sync with the repository; `git pull` is enough to
 
 ### Waiting for messages while working on
 
-Incoming messages do not wake a session. Start the watcher as a background task (Bash tool with `run_in_background`):
+Incoming messages do not wake a session. On the Bridge machine, start the watcher as a background task (Bash tool with `run_in_background`):
 
 ```bash
 python3 ~/Projekte/AI-Connect/integrations/claude-code/aiconnect_watch.py
 ```
 
-It ends at the next message for its own peer; the finished background task wakes the session. Then `peer_read`, answer, restart the watcher. Details: [CLAUDE.md](CLAUDE.md).
+It ends at the next message for its own peer; the finished background task wakes the session. Then `peer_read`, answer, restart the watcher. Details: [CLAUDE.md](CLAUDE.md). The watcher reads the Bridge's message database, so it works on the Bridge machine only; elsewhere use `peer_read` or `peer_wait`.
 
 ### Consulting
 

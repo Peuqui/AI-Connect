@@ -11,8 +11,8 @@ Funktioniert mit jedem MCP-fähigen Client (Claude Code, Claude Desktop, Cursor,
 ## Features
 
 - **Nachrichten zwischen Assistenten** über Rechnergrenzen, an einen Peer oder an alle (`*`)
-- **Code-Kontext**: einen Dateiausschnitt zusammen mit einer Frage schicken
-- **Offline-Zustellung**: Nachrichten warten in der Bridge, bis der Empfänger online ist
+- **Code-Kontext**: eine Datei oder einige ihrer Zeilen reisen mit einer Frage mit und sind auf dem anderen Rechner lesbar
+- **Offline-Zustellung**: Direktnachrichten warten in der Bridge, bis der Empfänger online ist
 - **Ein Peer pro Claude-Code-Sitzung**, benannt als `Host:Projekt` (z.B. `Mini:AIfred-Intelligence`)
 - **Zwei Zugänge**: ein STDIO-Client pro Sitzung (Claude Code) oder ein gemeinsamer HTTP/SSE-Server für jeden anderen MCP-Client
 - **Nachrichten-Wächter**, der eine wartende Claude-Code-Sitzung bei einer neuen Nachricht weckt, ohne Polling
@@ -160,7 +160,7 @@ Eingehende Nachrichten wecken eine Claude-Code-Sitzung nicht. Solange eine Abspr
 python3 <pfad-zu-AI-Connect>/integrations/claude-code/aiconnect_watch.py
 ```
 
-Er liest alle 5 Sekunden nur lesend die Nachrichtendatenbank der Bridge und beendet sich, sobald eine neue Nachricht für den eigenen Peer (oder `*`) eintrifft. Die beendete Hintergrundaufgabe weckt die Sitzung, die dann `peer_read` aufruft und den Wächter neu startet. Den Peer-Namen liest er vom MCP-Client der eigenen Sitzung ab (nicht aus dem Verzeichnis der Shell, das ein Worktree sein kann), und er meldet sich selbst nie an der Bridge an.
+Er läuft **nur auf dem Bridge-Rechner**, denn er liest alle 5 Sekunden nur lesend die Nachrichtendatenbank der Bridge und beendet sich, sobald eine neue Nachricht für den eigenen Peer (oder `*`) eintrifft. Die beendete Hintergrundaufgabe weckt die Sitzung, die dann `peer_read` aufruft und den Wächter neu startet. Den Peer-Namen liest er vom MCP-Client der eigenen Sitzung ab (nicht aus dem Verzeichnis der Shell, das ein Worktree sein kann), und er meldet sich selbst nie an der Bridge an.
 
 `peer_wait` blockiert die eigene Runde (keine Reaktion auf den User währenddessen), also nur verwenden, wenn es sonst nichts zu tun gibt, wie in `/consult`.
 
@@ -172,7 +172,7 @@ Er liest alle 5 Sekunden nur lesend die Nachrichtendatenbank der Bridge und been
 
 - **Peer-Namen**: Der STDIO-Client tritt als `Host:Projekt` bei (Hostname und Name des Arbeitsverzeichnisses). Der HTTP/SSE-Server nimmt `peer.name` aus der Config. `AI_CONNECT_PEER_NAME` überschreibt beides.
 - **Eine Sitzung pro Name**: Tritt eine zweite Sitzung unter einem Namen bei, der schon online ist, übernimmt die neuere; die Bridge teilt der älteren mit, dass sie ersetzt wurde, und diese verbindet sich nicht neu. Zwei Claude-Code-Sitzungen im selben Projektverzeichnis teilen sich deshalb einen Namen — eine schließen oder `AI_CONNECT_PEER_NAME` setzen.
-- **Offline-Nachrichten**: werden auf der Bridge in SQLite gespeichert und zugestellt, sobald der Peer wieder da ist.
+- **Offline-Nachrichten**: Direktnachrichten an einen Peer, der offline ist, werden auf der Bridge in SQLite gespeichert und zugestellt, sobald er wieder da ist. Rundrufe (`*`) erreichen nur die Peers, die in dem Moment online sind.
 - **Heartbeat**: Clients pingen alle 25 Sekunden; die Bridge pingt alle 60 Sekunden alle Peers an und entfernt jene, deren Verbindung tot ist oder die 5 Minuten lang stumm waren.
 
 ## Konfiguration
@@ -206,6 +206,7 @@ claude mcp list                       # Ist ai-connect eingetragen und verbunden
 ## Einschränkungen
 
 - **Kein Wecken bei Nachricht**: Eine eingehende Nachricht weckt keine Claude-Code-Sitzung. Der [Wächter](#auf-nachrichten-warten) umgeht das zwischen zwei Runden; eine bereits laufende Runde wird nicht unterbrochen, die Nachricht wird aufgegriffen, wenn sie endet.
+- **Wächter nur auf dem Bridge-Rechner**: Sitzungen auf anderen Rechnern können ihn noch nicht nutzen und müssen `peer_read` aufrufen oder in `peer_wait` warten.
 - **Kein Auslöser von außen**: Claude Codes [Hooks](https://code.claude.com/docs/en/hooks) können Kontext nur einspeisen, wenn der User etwas schickt; eine laufende Sitzung lässt sich von außen nicht anstoßen.
 - **Kontext nur auf Zuruf**: Assistenten teilen Code nur, wenn sie `peer_context` aufrufen; niemand weiß automatisch, woran die anderen arbeiten.
 - **Linux mit systemd** für die Dienste; auf anderen Plattformen müssen die Dienste von Hand eingerichtet werden.

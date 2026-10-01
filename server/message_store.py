@@ -1,15 +1,15 @@
-"""SQLite-basierter Message Store für AI-Connect."""
+"""SQLite message store of the Bridge: history and offline delivery."""
 
 import aiosqlite
 import json
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
 
 class MessageStore:
-    """Speichert Nachrichten in SQLite für Historie und Offline-Zustellung."""
+    """Stores every message; direct messages to offline peers wait here."""
 
     def __init__(self, db_path: str = "~/.config/ai-connect/messages.db"):
         self.db_path = Path(db_path).expanduser()
@@ -17,7 +17,7 @@ class MessageStore:
         self._db: Optional[aiosqlite.Connection] = None
 
     async def connect(self) -> None:
-        """Verbindet zur Datenbank und erstellt Tabellen."""
+        """Open the database and create the table."""
         self._db = await aiosqlite.connect(self.db_path)
         await self._db.execute("""
             CREATE TABLE IF NOT EXISTS messages (
@@ -38,11 +38,11 @@ class MessageStore:
     @property
     def _conn(self) -> aiosqlite.Connection:
         if self._db is None:
-            raise RuntimeError("MessageStore nicht verbunden, zuerst connect() aufrufen")
+            raise RuntimeError("MessageStore not connected, call connect() first")
         return self._db
 
     async def close(self) -> None:
-        """Schließt die Datenbankverbindung."""
+        """Close the database."""
         if self._db:
             await self._db.close()
             self._db = None
@@ -52,31 +52,40 @@ class MessageStore:
         from_peer: str,
         to_peer: str,
         content: str,
-        context: Optional[dict] = None
-    ) -> str:
-        """Speichert eine Nachricht und gibt die ID zurück."""
+        context: Optional[dict],
+        delivered: bool
+    ) -> dict:
+        """Store a message and return it as sent to peers."""
         msg_id = str(uuid.uuid4())
-        # ISO-Format mit Millisekunden: 2024-01-03T14:30:45.123Z
-        timestamp = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+        # ISO with milliseconds, e.g. 2026-01-03T14:30:45.123Z; the watcher
+        # compares these strings, so the format must stay fixed.
+        timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
         context_json = json.dumps(context) if context else None
 
         await self._conn.execute(
             """
-            INSERT INTO messages (id, from_peer, to_peer, content, context, timestamp)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO messages (id, from_peer, to_peer, content, context, timestamp, delivered)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-            (msg_id, from_peer, to_peer, content, context_json, timestamp)
+            (msg_id, from_peer, to_peer, content, context_json, timestamp, int(delivered))
         )
         await self._conn.commit()
-        return msg_id
+        return {
+            "id": msg_id,
+            "from": from_peer,
+            "to": to_peer,
+            "content": content,
+            "context": context,
+            "timestamp": timestamp
+        }
 
     async def get_unread(self, peer: str) -> list[dict]:
-        """Holt alle ungelesenen Nachrichten für einen Peer."""
+        """Direct messages to this peer that have not been delivered yet."""
         cursor = await self._conn.execute(
             """
             SELECT id, from_peer, to_peer, content, context, timestamp
             FROM messages
-            WHERE (to_peer = ? OR to_peer = '*') AND delivered = 0
+            WHERE to_peer = ? AND delivered = 0
             ORDER BY timestamp ASC
             """,
             (peer,)
@@ -97,7 +106,7 @@ class MessageStore:
         return messages
 
     async def mark_delivered(self, message_ids: list[str]) -> None:
-        """Markiert Nachrichten als zugestellt."""
+        """Mark messages as delivered."""
         if not message_ids:
             return
         placeholders = ",".join("?" * len(message_ids))
@@ -113,7 +122,7 @@ class MessageStore:
         peer2: str,
         limit: int = 50
     ) -> list[dict]:
-        """Holt den Chatverlauf zwischen zwei Peers."""
+        """The latest messages between two peers, oldest first."""
         cursor = await self._conn.execute(
             """
             SELECT id, from_peer, to_peer, content, context, timestamp
