@@ -24,9 +24,12 @@ WATCH_COMMAND = (
 )
 
 WATCHER_NOTE = f"""Incoming messages do not wake a Claude Code session. Keep the watcher
-running as a background task (Bash with run_in_background) for the whole
-session — start it at the beginning and again every time it ends:
+running as a background task (Bash with run_in_background and timeout
+7200000) for the whole session — start it at the beginning and again every
+time it ends:
     {WATCH_COMMAND}
+Without that timeout Claude Code stops the task after its default 30 minutes,
+and from then on no message wakes the session.
 It costs nothing while it waits and ends at the next message for this peer
 (or when the Bridge restarts, or after 110 minutes, which only needs a
 restart); the finished task wakes the session. Then
