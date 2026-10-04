@@ -14,7 +14,7 @@
 - `config_loader.py`: one config loader for the Bridge and both MCP clients
 
 ### Changed
-- Windows installer `install.cmd` / `install.ps1` (not yet tested on Windows): the same modes as `install.sh`; services as scheduled tasks (start at logon, no console window, restart on failure, no administrator rights), and for the server a firewall rule for port 9999 on private networks only
+- Windows installer `install.cmd` / `install.ps1`, tested on Windows 11 (client and server): the same modes as `install.sh`; services as scheduled tasks (start at logon, no console window, restart on failure, as the user); tasks and the firewall rule for port 9999 (private networks only) need administrator rights, so the script restarts itself elevated through UAC. Clients on the Bridge machine connect to 127.0.0.1 when `bridge.host` is 0.0.0.0, which Windows refuses as a target
 - The watcher's "no peer name" error says to restart the session (or reconnect `ai-connect` in `/mcp`) after an update, because the running MCP client records its name only at start
 - `install.sh` reworked: `--client` installs venv, config and the Claude Code registration only, with no service and no sudo; `--server` adds the Bridge service; `--http` adds the HTTP/SSE service for other MCP clients (was installed on every machine)
 - The Bridge also logs to a rotated `bridge.log`, and it stops on SIGTERM/SIGINT through `signal.signal`, which Windows supports too

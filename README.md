@@ -75,7 +75,7 @@ Both work side by side. (As of Claude Code 2.1.289, October 2026.)
 
 ## Setup
 
-**Requirements:** Python 3.10+ and git. One machine runs the Bridge Server (Linux with systemd); every machine whose AI assistant should talk to the others gets the client. The Bridge machine gets the client automatically.
+**Requirements:** Python 3.10+ and git. Linux or Windows. One machine runs the Bridge Server; every machine whose AI assistant should talk to the others gets the client. The Bridge machine gets the client automatically.
 
 ### 1. Bridge Server (one machine, e.g. a home server or Raspberry Pi)
 
@@ -102,6 +102,22 @@ cd AI-Connect
 It asks for the Bridge machine's IP or hostname and the Bridge token and registers AI-Connect with Claude Code. A client needs no service and no sudo: every Claude Code session starts its own MCP client.
 
 `--http` (with `--server` or `--client`) adds `ai-connect-mcp.service`, the HTTP/SSE server for other MCP clients (port 9998). `./install.sh --status`, `--update` and `--uninstall` work on every machine.
+
+### Windows
+
+The same, with `install.cmd` (double-click for the interactive installation, or with options in a terminal):
+
+```bat
+git clone https://github.com/Peuqui/AI-Connect.git %USERPROFILE%\AI-Connect
+%USERPROFILE%\AI-Connect\install.cmd -Client
+```
+
+`-Server`, `-Http`, `-Update`, `-Status` and `-Uninstall` work as on Linux. Differences:
+
+- Needs Python 3.10+ (from python.org with the `py` launcher, or from the Microsoft Store) and Claude Code installed natively on Windows.
+- Services are scheduled tasks that start at logon, without a console window, as your user. Creating them (`-Server`, `-Http`) and the firewall rule for port 9999 (private networks only) needs administrator rights: the script asks once through UAC. A client needs none.
+- Claude Code's native installer does not add `%USERPROFILE%\.local\bin` to `PATH`; the AI-Connect installer finds `claude.exe` there anyway, but add it to `PATH` for your terminal.
+- Tested on Windows 11 with Claude Code 2.1.289 (client and server); `-Http` and the Microsoft Store Python not yet.
 
 ### 3. Claude Code and other MCP clients
 
@@ -239,7 +255,7 @@ claude mcp list                       # is ai-connect registered and connected?
 - **One shared token, no encryption**: see the [security note](#1-bridge-server-one-machine-eg-a-home-server-or-raspberry-pi).
 - **Manual context**: assistants share code only when they call `peer_context`; what the others work on is known only as far as they set a status line (`peer_set_status`).
 - **State needs hooks**: busy / idle / waiting, and with it `peer_notify_when_idle`, works only for peers whose harness reports it; for Claude Code see the [hooks](integrations/claude-code/README.md#1-install).
-- **Linux with systemd** for the services; other platforms need the services set up by hand.
+- **Linux (systemd) and Windows (scheduled tasks)** have installers; macOS needs the services set up by hand.
 
 Pull requests are welcome if you find a better approach.
 
