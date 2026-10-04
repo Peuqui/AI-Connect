@@ -1,6 +1,5 @@
 {
   "name": "ai-connect",
-  "displayName": "AI-Connect",
   "description": "Message other AI coding sessions across machines, people and accounts through a self-hosted AI-Connect Bridge: MCP server, state hooks and the /consult command",
   "author": {
     "name": "Peuqui",
@@ -9,13 +8,19 @@
   "homepage": "https://github.com/Peuqui/AI-Connect",
   "repository": "https://github.com/Peuqui/AI-Connect",
   "license": "MIT",
-  "keywords": ["mcp", "agent-communication", "multi-agent", "self-hosted"],
-  "commands": ["./integrations/claude-code/commands/consult.md"],
-  "hooks": "./integrations/claude-code/hooks.json",
+  "keywords": [
+    "mcp",
+    "agent-communication",
+    "multi-agent",
+    "self-hosted"
+  ],
   "mcpServers": {
     "ai-connect": {
-      "command": "${CLAUDE_PLUGIN_ROOT}/venv/bin/python",
-      "args": ["${CLAUDE_PLUGIN_ROOT}/client/server.py"]
+      "command": "${CLAUDE_PLUGIN_ROOT}/../../../venv/bin/python",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/../../../client/server.py"
+      ]
     }
-  }
+  },
+  "hooks": "./hooks.json"
 }
