@@ -203,6 +203,7 @@ Incoming messages do not wake a Claude Code session by themselves; the watcher d
 - One watcher per session: the Bridge turns away a second one.
 - A message that arrives while the session works (after its last `peer_read`) is reported by the next watcher at once.
 - When the Bridge restarts, the watcher reconnects by itself.
+- Claude Code labels the wake-up notice "Stop hook blocking error" (or "SessionStart"); that is how hooks report back, not an error.
 - It never registers as the peer, so it cannot take over the name; it takes the name from the session's own MCP client.
 
 ## Details

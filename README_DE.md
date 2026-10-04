@@ -203,6 +203,7 @@ Eingehende Nachrichten wecken eine Claude-Code-Sitzung nicht von selbst; das üb
 - Ein Wächter pro Sitzung: Die Bridge weist einen zweiten ab.
 - Eine Nachricht, die eintrifft, während die Sitzung arbeitet (nach ihrem letzten `peer_read`), meldet der nächste Wächter sofort.
 - Startet die Bridge neu, verbindet sich der Wächter selbst wieder.
+- Claude Code beschriftet den Weckhinweis mit „Stop hook blocking error“ (oder „SessionStart“); so melden sich Hooks zurück, es ist kein Fehler.
 - Er meldet sich nie als der Peer an, kann den Namen also nicht übernehmen; den Namen liest er vom MCP-Client der eigenen Sitzung ab.
 
 ## Details
