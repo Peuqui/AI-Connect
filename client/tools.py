@@ -5,7 +5,7 @@ from pathlib import Path
 
 from bridge_client import get_client
 
-NOT_CONNECTED = "❌ Not connected to the Bridge Server."
+NOT_CONNECTED = "❌ Not connected to the Bridge Server (peer_status shows why)."
 
 
 def _format_time(moment: datetime) -> str:
@@ -138,6 +138,8 @@ async def peer_status() -> str:
     bridge = f"{client.host}:{client.port}"
     if client.connected:
         return f"✅ Connected as '{client.peer_name}' to the Bridge Server {bridge}"
+    if client.standby:
+        return f"⏸️ Standby: another session holds the name '{client.peer_name}' on the Bridge Server {bridge}"
     if client.reconnecting:
         return f"🔄 Reconnecting to the Bridge Server {bridge}..."
     return f"❌ Not connected. Bridge Server: {bridge}"

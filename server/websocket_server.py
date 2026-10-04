@@ -13,6 +13,14 @@ from .peer_registry import Peer, PeerRegistry
 logger = logging.getLogger(__name__)
 
 HEARTBEAT_SECONDS = 60
+# Sender of the Bridge's own notices; not of the form Host:Project, so no
+# peer can have it
+BRIDGE_SENDER = "Bridge"
+TAKEOVER_NOTICE = (
+    "Another session with the name {name} was online and has been put on standby; "
+    "it takes the name back once this session leaves. Two sessions in the same "
+    "project directory share a name: close one, or set AI_CONNECT_PEER_NAME."
+)
 
 
 class BridgeServer:
@@ -28,9 +36,12 @@ class BridgeServer:
         # Watchers per peer name: connections that want to hear about new
         # messages for that peer without registering as it
         self._watchers: dict[str, set[ServerConnection]] = {}
+        # Standby connections per peer name: replaced sessions that wait for
+        # the name to become free again
+        self._standby: dict[str, set[ServerConnection]] = {}
 
         self.registry.on_join(self._announce_joined)
-        self.registry.on_leave(self._announce_left)
+        self.registry.on_leave(self._handle_left)
 
     async def start(self) -> None:
         await self.store.connect()
@@ -65,6 +76,14 @@ class BridgeServer:
                     if not name:
                         await self._send_error(websocket, "'register' needs a 'name'")
                         continue
+                    taken = self.registry.get(name) is not None
+                    if taken and message.get("standby"):
+                        # A replaced session must not push the new one out again
+                        self._standby.setdefault(name, set()).add(websocket)
+                        await websocket.send(json.dumps({"type": "standby", "name": name}))
+                        logger.info(f"Peer on standby: {name} ({client_ip})")
+                        continue
+                    self._standby.get(name, set()).discard(websocket)
                     await self.registry.register(name, client_ip, websocket)
                     peer_name = name
                     await websocket.send(json.dumps({"type": "registered", "name": name}))
@@ -74,6 +93,12 @@ class BridgeServer:
                     if unread:
                         await websocket.send(json.dumps({"type": "unread", "messages": unread}))
                         await self.store.mark_delivered([m["id"] for m in unread])
+                    if taken:
+                        # Goes to the new session and wakes the watchers of
+                        # both sessions, which watch the same name
+                        await self._route_message(
+                            {"to": name, "content": TAKEOVER_NOTICE.format(name=name)}, BRIDGE_SENDER
+                        )
 
                 elif msg_type == "ping":
                     if peer_name:
@@ -116,8 +141,8 @@ class BridgeServer:
         except websockets.exceptions.ConnectionClosed:
             pass
         finally:
-            for watchers in self._watchers.values():
-                watchers.discard(websocket)
+            for connections in (*self._watchers.values(), *self._standby.values()):
+                connections.discard(websocket)
             logger.info(f"Connection closed: {peer_name or client_ip}")
             # Only remove the peer if this connection is still the active one;
             # after a takeover the name belongs to the new connection.
@@ -185,10 +210,27 @@ class BridgeServer:
             if other.name != peer.name:
                 await self._send_to(other, payload)
 
+    async def _handle_left(self, peer: Peer) -> None:
+        await self._announce_left(peer)
+        await self._offer_name(peer.name)
+
     async def _announce_left(self, peer: Peer) -> None:
         payload = json.dumps({"type": "peer_left", "peer": peer.name})
         for other in self.registry.all():
             await self._send_to(other, payload)
+
+    async def _offer_name(self, name: str) -> None:
+        """Tell the standby connections of a name that it is free.
+
+        Each answers with a standby register; the first one gets the name,
+        the others stay on standby.
+        """
+        payload = json.dumps({"type": "name_free", "name": name})
+        for connection in list(self._standby.get(name, ())):
+            try:
+                await connection.send(payload)
+            except websockets.exceptions.ConnectionClosed:
+                self._standby[name].discard(connection)
 
     async def _heartbeat_loop(self) -> None:
         """Drop peers whose connection is dead or that stopped pinging."""

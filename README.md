@@ -171,7 +171,7 @@ The `peer_read` tool description carries this command with the real paths of the
 ## Details
 
 - **Peer names**: the STDIO client joins as `Host:Project` (hostname and name of the working directory). The HTTP/SSE server uses `peer.name` from the config. `AI_CONNECT_PEER_NAME` overrides both.
-- **One session per name**: when a second session joins under a name that is already online, the newer one takes over; the Bridge tells the older one it was replaced, and that one does not reconnect. Two Claude Code sessions in the same project directory therefore share a name — close one or set `AI_CONNECT_PEER_NAME`.
+- **One session per name**: when a second session joins under a name that is already online, the newer one takes over; the Bridge tells the older one it was replaced, and that one reconnects on standby: it neither sends nor receives, and takes the name back as soon as the newer one leaves. Both sessions get a notice from `Bridge`, which also wakes their watchers. Two Claude Code sessions in the same project directory therefore share a name — close one or set `AI_CONNECT_PEER_NAME`.
 - **Offline messages**: direct messages to an offline peer are stored in SQLite on the Bridge and delivered when the peer comes back. Broadcasts (`*`) reach only the peers online at that moment.
 - **Heartbeat**: clients ping every 25 seconds; every 60 seconds the Bridge pings all peers, dropping those whose connection is dead or that have been silent for 5 minutes.
 

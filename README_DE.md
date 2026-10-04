@@ -171,7 +171,7 @@ Die Tool-Beschreibung von `peer_read` enthält diesen Befehl mit den echten Pfad
 ## Details
 
 - **Peer-Namen**: Der STDIO-Client tritt als `Host:Projekt` bei (Hostname und Name des Arbeitsverzeichnisses). Der HTTP/SSE-Server nimmt `peer.name` aus der Config. `AI_CONNECT_PEER_NAME` überschreibt beides.
-- **Eine Sitzung pro Name**: Tritt eine zweite Sitzung unter einem Namen bei, der schon online ist, übernimmt die neuere; die Bridge teilt der älteren mit, dass sie ersetzt wurde, und diese verbindet sich nicht neu. Zwei Claude-Code-Sitzungen im selben Projektverzeichnis teilen sich deshalb einen Namen — eine schließen oder `AI_CONNECT_PEER_NAME` setzen.
+- **Eine Sitzung pro Name**: Tritt eine zweite Sitzung unter einem Namen bei, der schon online ist, übernimmt die neuere; die Bridge teilt der älteren mit, dass sie ersetzt wurde, und diese verbindet sich im Standby neu: Sie sendet und empfängt nichts und holt sich den Namen zurück, sobald die neuere geht. Beide Sitzungen bekommen einen Hinweis von `Bridge`, der auch ihre Wächter weckt. Zwei Claude-Code-Sitzungen im selben Projektverzeichnis teilen sich deshalb einen Namen — eine schließen oder `AI_CONNECT_PEER_NAME` setzen.
 - **Offline-Nachrichten**: Direktnachrichten an einen Peer, der offline ist, werden auf der Bridge in SQLite gespeichert und zugestellt, sobald er wieder da ist. Rundrufe (`*`) erreichen nur die Peers, die in dem Moment online sind.
 - **Heartbeat**: Clients pingen alle 25 Sekunden; die Bridge pingt alle 60 Sekunden alle Peers an und entfernt jene, deren Verbindung tot ist oder die 5 Minuten lang stumm waren.
 

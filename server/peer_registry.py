@@ -45,8 +45,8 @@ class PeerRegistry:
         """Register a peer under the name it sent ("Host:Project").
 
         If the name is already online, the new connection takes over: the
-        old one is told it was replaced, so it does not reconnect and push
-        the new one out again, and is closed.
+        old one is told it was replaced, so it reconnects on standby instead
+        of pushing the new one out again, and is closed.
         """
         existing = self._peers.pop(name, None)
         if existing and existing.websocket:
