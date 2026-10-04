@@ -143,13 +143,24 @@ Write-Host ''
 Write-Host "=== AI-Connect $Mode installation ===" -ForegroundColor Blue
 
 Write-Host '[1/4] Python venv and dependencies...' -ForegroundColor Yellow
-if (-not (Get-Command py -ErrorAction SilentlyContinue)) {
-    Write-Host 'The Python launcher "py" was not found. Install Python 3.10 or newer from python.org.' -ForegroundColor Red
+# Python from python.org brings the launcher "py", the Microsoft Store
+# version only "python"
+if (Get-Command py -ErrorAction SilentlyContinue) {
+    $BasePython = @('py', '-3')
+} elseif (Get-Command python -ErrorAction SilentlyContinue) {
+    $BasePython = @('python')
+} else {
+    Write-Host 'Python was not found (neither "py" nor "python"). Install Python 3.10 or newer.' -ForegroundColor Red
     exit 1
 }
-Invoke-Native py @('-3', '-c', 'import sys; sys.exit(sys.version_info < (3, 10))')
+$BaseArgs = @($BasePython | Select-Object -Skip 1)
+& $BasePython[0] @BaseArgs -c 'import sys; sys.exit(sys.version_info < (3, 10))'
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "$($BasePython -join ' ') is not Python 3.10 or newer. Install a current Python." -ForegroundColor Red
+    exit 1
+}
 if (-not (Test-Path $Python)) {
-    Invoke-Native py @('-3', '-m', 'venv', (Join-Path $Repo 'venv'))
+    Invoke-Native $BasePython[0] ($BaseArgs + @('-m', 'venv', (Join-Path $Repo 'venv')))
 }
 Invoke-Native $Python @('-m', 'pip', 'install', '-q', '--upgrade', 'pip')
 Invoke-Native $Python @('-m', 'pip', 'install', '-q', '--upgrade', '-r', (Join-Path $Repo 'requirements.txt'))
