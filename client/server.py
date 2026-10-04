@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from log_setup import setup_logging
 from mcp_app import create_app
-from peer_name import peer_name, record_session_name, session_pid
+from peer_name import peer_name, record_session_name, remove_dead_sessions, session_pid
 
 name = peer_name(os.environ, Path.cwd())
 # STDIO carries the MCP protocol, so logs go to a file only, one per peer:
@@ -28,6 +28,7 @@ mcp = create_app(name)
 
 def main() -> None:
     # The session's watcher finds the name by CLAUDE_PID
+    remove_dead_sessions()
     session_file = record_session_name(session_pid(), name)
     def end(*_: object) -> None:
         # Claude Code ends its MCP servers with SIGTERM, which would skip the

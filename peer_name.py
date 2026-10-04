@@ -52,6 +52,35 @@ def seen_since(session_pid: int | str) -> str | None:
     return path.read_text(encoding="utf-8") if path.exists() else None
 
 
+def process_alive(pid: int) -> bool:
+    """Whether a process with this id is running.
+
+    Not os.kill(pid, 0) on Windows: there os.kill terminates the process.
+    """
+    if sys.platform == "win32":
+        return pid in _windows_processes()
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def remove_dead_sessions() -> None:
+    """Delete the name and read-state files of sessions that no longer run.
+
+    Windows ends a session's MCP client hard, so its files stay behind.
+    """
+    if not SESSIONS_DIR.exists():
+        return
+    for path in SESSIONS_DIR.iterdir():
+        pid = path.name.split(".")[0]
+        if pid.isdigit() and not process_alive(int(pid)):
+            path.unlink(missing_ok=True)
+
+
 def session_pid() -> int:
     """Process id of the session (Claude Code) that started this MCP client.
 
@@ -62,7 +91,7 @@ def session_pid() -> int:
     """
     parent = os.getppid()
     if sys.platform == "win32":
-        launcher_parent, exe = _windows_process(parent)
+        launcher_parent, exe = _windows_processes()[parent]
         if exe.lower() in ("python.exe", "pythonw.exe"):
             return launcher_parent
     return parent
@@ -87,19 +116,19 @@ if sys.platform == "win32":
             ("szExeFile", ctypes.c_wchar * 260),
         ]
 
-    def _windows_process(pid: int) -> tuple[int, str]:
-        """Parent process id and executable name of pid, from a Toolhelp snapshot."""
+    def _windows_processes() -> dict[int, tuple[int, str]]:
+        """Every running process: id -> (parent id, executable name), from a Toolhelp snapshot."""
         kernel32 = ctypes.windll.kernel32
         kernel32.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
         snapshot = kernel32.CreateToolhelp32Snapshot(0x2, 0)  # TH32CS_SNAPPROCESS
         entry = _ProcessEntry()
         entry.dwSize = ctypes.sizeof(entry)
+        processes = {}
         try:
             found = kernel32.Process32FirstW(snapshot, ctypes.byref(entry))
             while found:
-                if entry.th32ProcessID == pid:
-                    return int(entry.th32ParentProcessID), entry.szExeFile
+                processes[int(entry.th32ProcessID)] = (int(entry.th32ParentProcessID), entry.szExeFile)
                 found = kernel32.Process32NextW(snapshot, ctypes.byref(entry))
         finally:
             kernel32.CloseHandle(snapshot)
-        raise LookupError(f"process {pid} not found")
+        return processes
