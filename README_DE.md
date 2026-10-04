@@ -195,6 +195,8 @@ Die Tool-Beschreibung von `peer_read` enthält diesen Befehl mit den echten Pfad
 - **Peer-Namen**: Der STDIO-Client tritt als `Host:Projekt` bei (Hostname und Name des Arbeitsverzeichnisses). Der HTTP/SSE-Server nimmt `peer.name` aus der Config. `AI_CONNECT_PEER_NAME` überschreibt beides.
 - **Eine Sitzung pro Name**: Tritt eine zweite Sitzung unter einem Namen bei, der schon online ist, übernimmt die neuere; die Bridge teilt der älteren mit, dass sie ersetzt wurde, und diese verbindet sich im Standby neu: Sie sendet und empfängt nichts und holt sich den Namen zurück, sobald die neuere geht. Beide Sitzungen bekommen einen Hinweis von `Bridge`, der auch ihre Wächter weckt. Zwei Claude-Code-Sitzungen im selben Projektverzeichnis teilen sich deshalb einen Namen — eine schließen oder `AI_CONNECT_PEER_NAME` setzen.
 - **Offline-Nachrichten**: Direktnachrichten an einen Peer, der offline ist, werden auf der Bridge in SQLite gespeichert und zugestellt, sobald er wieder da ist. Rundrufe (`*`) erreichen nur die Peers, die in dem Moment online sind.
+- **Aufbewahrung des Verlaufs**: Die Bridge löscht Nachrichten, die älter als `bridge.history_days` sind (180 in der Vorlage), beim Start und danach täglich.
+- **Logs**: Jeder STDIO-Client schreibt eine eigene Datei, `~/.config/ai-connect/mcp-<Host>_<Projekt>.log`, der HTTP/SSE-Server `mcp-http.log`; beide werden bei `logging.max_megabytes` rotiert, `logging.backup_count` alte Dateien bleiben. Die Bridge loggt ins systemd-Journal.
 - **Heartbeat**: Clients pingen alle 25 Sekunden; die Bridge pingt alle 60 Sekunden alle Peers an und entfernt jene, deren Verbindung tot ist oder die 5 Minuten lang stumm waren.
 
 ## Konfiguration
@@ -213,7 +215,7 @@ Die Tool-Beschreibung von `peer_read` enthält diesen Befehl mit den echten Pfad
 ./install.sh --status                 # Dienste, Config, Peer-Name
 journalctl -u ai-connect -f           # Bridge-Log (Bridge-Rechner)
 journalctl -u ai-connect-mcp -f       # Log des HTTP/SSE-Servers
-tail -f ~/.config/ai-connect/mcp.log  # Log des STDIO-Clients (Claude Code)
+tail -f ~/.config/ai-connect/mcp-<Host>_<Projekt>.log  # STDIO-Client-Log einer Sitzung
 nc -zv <bridge-ip> 9999               # Ist die Bridge erreichbar?
 claude mcp list                       # Ist ai-connect eingetragen und verbunden?
 ```

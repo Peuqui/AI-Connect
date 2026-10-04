@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 async def run_server() -> None:
     bridge = load_config()["bridge"]
-    server = BridgeServer(host=bridge["host"], port=bridge["port"])
+    server = BridgeServer(host=bridge["host"], port=bridge["port"], history_days=bridge["history_days"])
 
     stop_event = asyncio.Event()
     loop = asyncio.get_running_loop()

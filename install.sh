@@ -348,6 +348,7 @@ if [[ ! -f "$CONFIG_DIR/config.yaml" ]]; then
 bridge:
   host: "$BRIDGE_HOST"
   port: 9999
+  history_days: 180
 
 peer:
   name: "$PEER_NAME"
@@ -355,6 +356,10 @@ peer:
 mcp:
   host: "127.0.0.1"
   port: 9998
+
+logging:
+  max_megabytes: 5
+  backup_count: 3
 EOF
     echo -e "  ${GREEN}Config written: $CONFIG_DIR/config.yaml${NC}"
 fi

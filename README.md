@@ -195,6 +195,8 @@ The `peer_read` tool description carries this command with the real paths of the
 - **Peer names**: the STDIO client joins as `Host:Project` (hostname and name of the working directory). The HTTP/SSE server uses `peer.name` from the config. `AI_CONNECT_PEER_NAME` overrides both.
 - **One session per name**: when a second session joins under a name that is already online, the newer one takes over; the Bridge tells the older one it was replaced, and that one reconnects on standby: it neither sends nor receives, and takes the name back as soon as the newer one leaves. Both sessions get a notice from `Bridge`, which also wakes their watchers. Two Claude Code sessions in the same project directory therefore share a name — close one or set `AI_CONNECT_PEER_NAME`.
 - **Offline messages**: direct messages to an offline peer are stored in SQLite on the Bridge and delivered when the peer comes back. Broadcasts (`*`) reach only the peers online at that moment.
+- **History retention**: the Bridge deletes messages older than `bridge.history_days` (180 in the template), at start and then daily.
+- **Logs**: each STDIO client writes its own file, `~/.config/ai-connect/mcp-<Host>_<Project>.log`, the HTTP/SSE server `mcp-http.log`; both are rotated at `logging.max_megabytes`, keeping `logging.backup_count` old files. The Bridge logs to the systemd journal.
 - **Heartbeat**: clients ping every 25 seconds; every 60 seconds the Bridge pings all peers, dropping those whose connection is dead or that have been silent for 5 minutes.
 
 ## Configuration
@@ -213,7 +215,7 @@ The `peer_read` tool description carries this command with the real paths of the
 ./install.sh --status                 # services, config, peer name
 journalctl -u ai-connect -f           # Bridge log (Bridge machine)
 journalctl -u ai-connect-mcp -f       # HTTP/SSE server log
-tail -f ~/.config/ai-connect/mcp.log  # STDIO client log (Claude Code)
+tail -f ~/.config/ai-connect/mcp-<Host>_<Project>.log  # STDIO client log of one session
 nc -zv <bridge-ip> 9999               # is the Bridge reachable?
 claude mcp list                       # is ai-connect registered and connected?
 ```

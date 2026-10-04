@@ -7,6 +7,9 @@ bridge:
   # On every other machine: IP or hostname of the Bridge machine.
   host: "0.0.0.0"
   port: 9999
+  # Bridge machine only: messages older than this many days are deleted
+  # from the history, at start and then daily
+  history_days: 180
 
 peer:
   # Name of this machine's HTTP/SSE server in the network. The STDIO client
@@ -18,3 +21,9 @@ mcp:
   # Address of the local HTTP/SSE server for MCP clients
   host: "127.0.0.1"
   port: 9998
+
+logging:
+  # Log files of the MCP clients are rotated at this size; this many old
+  # files are kept per log
+  max_megabytes: 5
+  backup_count: 3
