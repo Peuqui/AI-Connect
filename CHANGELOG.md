@@ -3,6 +3,7 @@
 ## [Unreleased] - 2026-10-01
 
 ### Added
+- The Bridge deletes messages older than `bridge.history_days` from the history, at start and then daily. New required config keys `bridge.history_days` and `logging.*`: add them to existing configs (see `config.yaml.example`)
 - The rules make every Claude Code session keep its watcher running from the start, so messages wake the recipient without the user prompting it; the tool descriptions carry the exact watcher command of the installation
 - `requirements.txt` as the single list of dependencies; `install.sh` installs from it (`aiosqlite` was missing, the Bridge crashed on fresh machines)
 - `config_loader.py`: one config loader for the Bridge and both MCP clients
@@ -13,6 +14,7 @@
 - `/beratung` renamed to `/consult` and rewritten in English, as are the Claude Code rules and the integration README; tag `[WEITER]` is now `[CONTINUE]`
 - README (EN/DE) rewritten: setup via `install.sh`, Claude Code via the STDIO client, current architecture diagram, corrected heartbeat timings
 - README (EN/DE): AI-Connect works across people, accounts and subscriptions; comparison with Claude Code's built-in cross-session messaging; security note (no authentication or encryption: LAN or VPN only); the limitation "no way to signal a running session from outside" is outdated since Claude Code's per-session inbox socket
+- Logs of the MCP clients are rotated by size (`logging.max_megabytes`, `logging.backup_count`); each STDIO client writes its own `mcp-<Host>_<Project>.log` instead of all sessions sharing `mcp.log` (a rotated file must have a single writer, and the shared file did not show which session wrote a line)
 
 ### Fixed
 - A session replaced by a newer one with the same name stayed offline for good, even after the newer one had left (2026-10-04: a short second instance of the archimedes-lander session left the running one unreachable); it now waits on standby (`register` with `standby`, Bridge answers `standby` and later `name_free`) and takes the name back. Both sessions get a notice from `Bridge`

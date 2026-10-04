@@ -13,6 +13,7 @@ from .peer_registry import Peer, PeerRegistry
 logger = logging.getLogger(__name__)
 
 HEARTBEAT_SECONDS = 60
+HISTORY_CLEANUP_SECONDS = 24 * 60 * 60
 # Sender of the Bridge's own notices; not of the form Host:Project, so no
 # peer can have it
 BRIDGE_SENDER = "Bridge"
@@ -26,13 +27,15 @@ TAKEOVER_NOTICE = (
 class BridgeServer:
     """Routes messages between peers and keeps them in the message store."""
 
-    def __init__(self, host: str, port: int):
+    def __init__(self, host: str, port: int, history_days: int):
         self.host = host
         self.port = port
+        self.history_days = history_days
         self.registry = PeerRegistry()
         self.store = MessageStore()
         self._server: Server | None = None
         self._heartbeat_task: asyncio.Task | None = None
+        self._history_cleanup_task: asyncio.Task | None = None
         # Watchers per peer name: connections that want to hear about new
         # messages for that peer without registering as it
         self._watchers: dict[str, set[ServerConnection]] = {}
@@ -47,11 +50,13 @@ class BridgeServer:
         await self.store.connect()
         self._server = await websockets.serve(self._handle_connection, self.host, self.port)
         self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
+        self._history_cleanup_task = asyncio.create_task(self._history_cleanup_loop())
         logger.info(f"Bridge Server listening on ws://{self.host}:{self.port}")
 
     async def stop(self) -> None:
-        if self._heartbeat_task:
-            self._heartbeat_task.cancel()
+        for task in (self._heartbeat_task, self._history_cleanup_task):
+            if task:
+                task.cancel()
         if self._server:
             self._server.close()
             await self._server.wait_closed()
@@ -244,3 +249,10 @@ class BridgeServer:
                     await self.registry.unregister(peer.name)
             for name in await self.registry.cleanup_stale():
                 logger.info(f"Peer timed out: {name}")
+
+    async def _history_cleanup_loop(self) -> None:
+        """Delete messages older than history_days, at start and then daily."""
+        while True:
+            deleted = await self.store.delete_older_than(self.history_days)
+            logger.info(f"History cleanup: {deleted} messages older than {self.history_days} days deleted")
+            await asyncio.sleep(HISTORY_CLEANUP_SECONDS)

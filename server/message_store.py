@@ -2,7 +2,7 @@
 
 import json
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import aiosqlite
@@ -115,6 +115,17 @@ class MessageStore:
             message_ids
         )
         await self._conn.commit()
+
+    async def delete_older_than(self, days: int) -> int:
+        """Delete messages older than days; return how many."""
+        # Compare the date only: older rows use "YYYY-MM-DD HH:MM:SS",
+        # newer ones ISO with "T" and "Z"
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%d")
+        cursor = await self._conn.execute(
+            "DELETE FROM messages WHERE substr(timestamp, 1, 10) < ?", (cutoff,)
+        )
+        await self._conn.commit()
+        return cursor.rowcount
 
     async def get_history(
         self,

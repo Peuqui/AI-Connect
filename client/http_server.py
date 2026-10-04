@@ -14,18 +14,11 @@ sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from config_loader import load_config
+from log_setup import setup_logging
 from mcp_app import create_app
 
-log_dir = Path.home() / ".config" / "ai-connect"
-log_dir.mkdir(parents=True, exist_ok=True)
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[
-        logging.FileHandler(log_dir / "mcp-http.log"),
-        logging.StreamHandler()  # also to stdout for the journal
-    ]
-)
+# Also to stdout for the journal
+setup_logging("mcp-http.log", logging.StreamHandler())
 
 config = load_config()
 mcp = create_app(os.environ.get("AI_CONNECT_PEER_NAME", config["peer"]["name"]))
