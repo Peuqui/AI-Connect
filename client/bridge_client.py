@@ -38,6 +38,10 @@ class BridgeClient:
         # The Bridge refused the token; retrying cannot help until the
         # config is fixed and the client restarted
         self._token_refused = False
+        # Own state and status line; the Bridge forgets them with the
+        # connection, so they are sent again after every registration
+        self._state: tuple[str, str] | None = None
+        self._status = ""
         self._message_queue: list[dict] = []
         self._message_event: asyncio.Event | None = None
         # Answers to requests, keyed by the response type ("peer_list", "history")
@@ -144,6 +148,28 @@ class BridgeClient:
         """Ask the Bridge for the conversation with a peer, oldest first."""
         response = await self._request({"type": "history", "peer": peer, "limit": limit}, "history")
         return response.get("messages", [])
+
+    async def set_state(self, state: str, detail: str) -> bool:
+        """Report this peer's state ("busy", "idle", "waiting"); unchanged states are not resent."""
+        if self._state == (state, detail):
+            return True
+        self._state = (state, detail)
+        return await self._send_state()
+
+    async def set_status(self, status: str) -> bool:
+        """Report what this peer is working on, shown in peer_list."""
+        self._status = status
+        return await self._send({"type": "set_status", "status": status})
+
+    async def notify_when_idle(self, peer: str) -> bool:
+        """Ask the Bridge for one message as soon as peer is done or waits for approval."""
+        return await self._send({"type": "notify_when_idle", "peer": peer})
+
+    async def _send_state(self) -> bool:
+        if self._state is None:
+            return True
+        state, detail = self._state
+        return await self._send({"type": "set_state", "state": state, "detail": detail})
 
     def pop_messages(self) -> list[dict]:
         """Return and clear the received messages."""
@@ -257,6 +283,9 @@ class BridgeClient:
                 self._connected = True
                 logger.info(f"Peer name '{self.peer_name}' free again, registered")
                 self._queue_notice(f"The other session has left; this session is online again as {self.peer_name}.")
+            await self._send_state()
+            if self._status:
+                await self._send({"type": "set_status", "status": self._status})
 
         elif msg_type == "replaced":
             # Taking the name back would push the other session out; the

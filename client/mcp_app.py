@@ -7,6 +7,7 @@ server; they differ only in the peer name and the transport.
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Literal
 
 from fastmcp import FastMCP
 
@@ -120,6 +121,43 @@ def create_app(peer_name: str) -> FastMCP:
             message: Optional message to go with it
         """
         return await tools.peer_context(file, lines, message)
+
+    @mcp.tool()
+    async def peer_set_status(status: str) -> str:
+        """Tell the other peers in one line what you are working on; peer_list shows it.
+
+        Set it when you start a larger task, clear it with "" when done.
+
+        Args:
+            status: One short line, e.g. "Refactoring the Bridge token check"
+        """
+        return await tools.peer_set_status(status)
+
+    @mcp.tool()
+    async def peer_set_state(state: Literal["busy", "idle", "waiting"], detail: str = "") -> str:
+        """Report whether this session is busy, idle or waiting for approval.
+
+        Called by hooks of the harness (for Claude Code see
+        integrations/claude-code/README.md), not by hand.
+
+        Args:
+            state: "busy", "idle" or "waiting" (for an approval)
+            detail: Optional, e.g. what the approval is for
+        """
+        return await tools.peer_set_state(state, detail)
+
+    @mcp.tool()
+    async def peer_notify_when_idle(peer: str) -> str:
+        """Get one message from the Bridge as soon as a peer is done or waits for approval.
+
+        Answers at once if the peer is idle already. Works only for peers
+        whose harness reports its state (see peer_set_state). The message
+        wakes you through the watcher like any other (see peer_read).
+
+        Args:
+            peer: Full name of the peer ("Host:Project")
+        """
+        return await tools.peer_notify_when_idle(peer)
 
     @mcp.tool()
     async def peer_status() -> str:

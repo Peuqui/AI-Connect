@@ -27,6 +27,23 @@ ln -s "$(pwd)/commands/consult.md" ~/.claude/commands/consult.md
 
 A symlink keeps the command in sync with the repository; `git pull` is enough to update rules and command.
 
+### 4. Report the session's state (hooks)
+
+So that other peers see in `peer_list` whether this session is busy, idle or waiting for an approval, and `peer_notify_when_idle` can tell them when it is done, add these hooks to `~/.claude/settings.json`. They call the AI-Connect tool `peer_set_state` of the session's own MCP client (hook type `mcp_tool`, so no script and no second connection); `"server"` is the name you registered the MCP server under:
+
+```json
+{
+  "hooks": {
+    "UserPromptSubmit": [{"hooks": [{"type": "mcp_tool", "server": "ai-connect", "tool": "peer_set_state", "input": {"state": "busy"}}]}],
+    "PostToolUse": [{"hooks": [{"type": "mcp_tool", "server": "ai-connect", "tool": "peer_set_state", "input": {"state": "busy"}}]}],
+    "Notification": [{"matcher": "permission_prompt", "hooks": [{"type": "mcp_tool", "server": "ai-connect", "tool": "peer_set_state", "input": {"state": "waiting", "detail": "${message}"}}]}],
+    "Stop": [{"hooks": [{"type": "mcp_tool", "server": "ai-connect", "tool": "peer_set_state", "input": {"state": "idle"}}]}]
+  }
+}
+```
+
+`PostToolUse` switches back to busy after an approval; the client sends a state only when it changes, so the Bridge sees just the transitions. Merge the block into existing `hooks` instead of replacing them.
+
 ## Usage
 
 ### The watcher
