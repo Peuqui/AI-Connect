@@ -87,7 +87,9 @@ cd AI-Connect
 
 Das Skript legt eine venv an, installiert `requirements.txt`, schreibt `~/.config/ai-connect/config.yaml` und richtet `ai-connect.service` (Bridge, Port 9999) sowie `ai-connect-mcp.service` (MCP über HTTP/SSE, Port 9998) ein und startet sie. Clients auf anderen Rechnern müssen Port 9999 erreichen können.
 
-> **Sicherheit:** Die Bridge hat weder Authentifizierung noch Verschlüsselung — wer Port 9999 erreicht, kann unter jedem Namen Nachrichten lesen und senden. Sie gehört in ein vertrauenswürdiges LAN. Um Rechner anderer Leute anzubinden, ein VPN nutzen (z. B. WireGuard oder Tailscale), statt den Port ins Internet zu öffnen.
+Das Skript erzeugt außerdem den Bridge-Token, `bridge.token`, und zeigt ihn an: Jeder Client-Rechner braucht denselben Wert. Ohne ihn weist die Bridge jede Verbindung ab.
+
+> **Sicherheit:** Der Token hält fern, wer ihn nicht hat; wer ihn hat, kann aber unter jedem Namen Nachrichten lesen und senden, und der Verkehr ist unverschlüsselt. Die Bridge gehört in ein vertrauenswürdiges LAN. Um Rechner anderer Leute anzubinden, ein VPN nutzen (z. B. WireGuard oder Tailscale), statt den Port ins Internet zu öffnen.
 
 ### 2. MCP-Client (jeder weitere Rechner)
 
@@ -97,7 +99,7 @@ cd AI-Connect
 ./install.sh --client
 ```
 
-Es fragt nach IP oder Hostname des Bridge-Rechners und richtet `ai-connect-mcp.service` ein.
+Es fragt nach IP oder Hostname des Bridge-Rechners und nach dem Bridge-Token und richtet `ai-connect-mcp.service` ein.
 
 `./install.sh --status`, `--update` und `--uninstall` funktionieren in beiden Fällen.
 
@@ -225,13 +227,14 @@ claude mcp list                       # Ist ai-connect eingetragen und verbunden
 | „Nicht verbunden“ | Falsches `bridge.host` | Auf Client-Rechnern muss es die IP des Bridge-Rechners sein, nicht `0.0.0.0` |
 | Connection refused | Bridge läuft nicht | `sudo systemctl start ai-connect` auf dem Bridge-Rechner |
 | Timeout | Firewall | Port 9999 auf dem Bridge-Rechner öffnen |
+| `peer_status`: Bridge hat den Token abgewiesen | `bridge.token` weicht von dem der Bridge ab | Wert aus der Config des Bridge-Rechners übernehmen, dann den Client neu starten |
 | `peer_status` zeigt Standby | Eine andere Sitzung hat denselben Namen übernommen | Eine schließen oder `AI_CONNECT_PEER_NAME` setzen; die Sitzung im Standby holt sich den Namen zurück, sobald die andere geht |
 
 ## Einschränkungen
 
 - **Wecken nur über den Wächter**: Eine AI-Connect-Nachricht weckt eine Claude-Code-Sitzung nicht von selbst. Der [Wächter](#auf-nachrichten-warten) umgeht das zwischen zwei Runden; eine bereits laufende Runde wird nicht unterbrochen, die Nachricht wird aufgegriffen, wenn sie endet.
 - **Claude Codes eigener Posteingang noch ungenutzt**: Claude Code gibt inzwischen jeder Sitzung einen Inbox-Socket, und eine Nachricht von den eigenen Kindprozessen der Sitzung weckt sie direkt ([Doku](https://code.claude.com/docs/en/cross-session-messaging#the-sessions-inbox-socket)). Der Wächter könnte darüber zustellen, statt sich zu beenden; das ist noch nicht umgesetzt.
-- **Keine Authentifizierung, keine Verschlüsselung**: siehe den [Sicherheitshinweis](#1-bridge-server-ein-rechner-zb-heimserver-oder-raspberry-pi).
+- **Ein gemeinsamer Token, keine Verschlüsselung**: siehe den [Sicherheitshinweis](#1-bridge-server-ein-rechner-zb-heimserver-oder-raspberry-pi).
 - **Kontext nur auf Zuruf**: Assistenten teilen Code nur, wenn sie `peer_context` aufrufen; niemand weiß automatisch, woran die anderen arbeiten.
 - **Linux mit systemd** für die Dienste; auf anderen Plattformen müssen die Dienste von Hand eingerichtet werden.
 

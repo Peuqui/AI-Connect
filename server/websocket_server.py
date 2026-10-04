@@ -1,11 +1,14 @@
 """WebSocket server of the AI-Connect Bridge: routes messages between peers."""
 
 import asyncio
+import hmac
 import json
 import logging
+from http import HTTPStatus
 
 import websockets
 from websockets.asyncio.server import Server, ServerConnection
+from websockets.http11 import Request, Response
 
 from .message_store import MessageStore
 from .peer_registry import Peer, PeerRegistry
@@ -27,10 +30,11 @@ TAKEOVER_NOTICE = (
 class BridgeServer:
     """Routes messages between peers and keeps them in the message store."""
 
-    def __init__(self, host: str, port: int, history_days: int):
+    def __init__(self, host: str, port: int, history_days: int, token: str):
         self.host = host
         self.port = port
         self.history_days = history_days
+        self._authorization = f"Bearer {token}".encode()
         self.registry = PeerRegistry()
         self.store = MessageStore()
         self._server: Server | None = None
@@ -48,7 +52,9 @@ class BridgeServer:
 
     async def start(self) -> None:
         await self.store.connect()
-        self._server = await websockets.serve(self._handle_connection, self.host, self.port)
+        self._server = await websockets.serve(
+            self._handle_connection, self.host, self.port, process_request=self._check_token
+        )
         self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
         self._history_cleanup_task = asyncio.create_task(self._history_cleanup_loop())
         logger.info(f"Bridge Server listening on ws://{self.host}:{self.port}")
@@ -61,6 +67,19 @@ class BridgeServer:
             self._server.close()
             await self._server.wait_closed()
         await self.store.close()
+
+    def _check_token(self, connection: ServerConnection, request: Request) -> Response | None:
+        """Refuse the handshake unless it carries the Bridge token.
+
+        Checked once per connection, so every message type, the watchers
+        and list_peers are covered alike.
+        """
+        sent = request.headers.get("Authorization", "").encode()
+        if hmac.compare_digest(sent, self._authorization):
+            return None
+        client_ip = connection.remote_address[0] if connection.remote_address else "unknown"
+        logger.warning(f"Refused connection with a missing or wrong token from {client_ip}")
+        return connection.respond(HTTPStatus.UNAUTHORIZED, "Missing or wrong AI-Connect token\n")
 
     async def _handle_connection(self, websocket: ServerConnection) -> None:
         """Serve one peer connection until it closes."""

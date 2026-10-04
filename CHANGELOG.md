@@ -3,6 +3,7 @@
 ## [Unreleased] - 2026-10-01
 
 ### Added
+- Bridge token: the Bridge refuses every connection whose handshake lacks `Authorization: Bearer <bridge.token>` (clients, HTTP/SSE server and watcher send it). `install.sh` generates the token on the Bridge machine and asks for it on clients. New required key `bridge.token`; a refused client stops reconnecting and `peer_status` says why
 - The Bridge deletes messages older than `bridge.history_days` from the history, at start and then daily. New required config keys `bridge.history_days` and `logging.*`: add them to existing configs (see `config.yaml.example`)
 - The rules make every Claude Code session keep its watcher running from the start, so messages wake the recipient without the user prompting it; the tool descriptions carry the exact watcher command of the installation
 - `requirements.txt` as the single list of dependencies; `install.sh` installs from it (`aiosqlite` was missing, the Bridge crashed on fresh machines)

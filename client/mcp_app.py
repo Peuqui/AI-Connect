@@ -42,7 +42,7 @@ def create_app(peer_name: str) -> FastMCP:
     @asynccontextmanager
     async def lifespan(app):
         bridge = load_config()["bridge"]
-        await init_client(host=bridge["host"], port=bridge["port"], peer_name=peer_name)
+        await init_client(host=bridge["host"], port=bridge["port"], peer_name=peer_name, token=bridge["token"])
         yield
         client = get_client()
         if client:

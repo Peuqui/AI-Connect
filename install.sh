@@ -333,13 +333,22 @@ if [[ ! -f "$CONFIG_DIR/config.yaml" ]]; then
     # clients connect to it. On the Bridge machine 0.0.0.0 serves both:
     # reachable from the network, and Linux routes a connect to 0.0.0.0
     # to the local machine. 127.0.0.1 would lock out every other machine.
+    # The Bridge refuses every connection without this shared secret: the
+    # Bridge machine generates it, every other machine needs the same value
     if [[ "$SERVER_MODE" == "server" ]]; then
         read -p "  Bridge listen address [0.0.0.0]: " BRIDGE_HOST
         BRIDGE_HOST=${BRIDGE_HOST:-0.0.0.0}
+        BRIDGE_TOKEN=$("$SCRIPT_DIR/venv/bin/python" -c "import secrets; print(secrets.token_hex(32))")
+        echo -e "  Bridge token (enter it on every client machine): ${GREEN}$BRIDGE_TOKEN${NC}"
     else
         read -p "  IP or hostname of the Bridge machine: " BRIDGE_HOST
         if [[ -z "$BRIDGE_HOST" ]]; then
             echo -e "${RED}Without the Bridge address the client cannot connect. Aborted.${NC}"
+            exit 1
+        fi
+        read -p "  Bridge token (shown when the Bridge was installed, bridge.token in its config): " BRIDGE_TOKEN
+        if [[ -z "$BRIDGE_TOKEN" ]]; then
+            echo -e "${RED}Without the token the Bridge refuses the client. Aborted.${NC}"
             exit 1
         fi
     fi
@@ -349,6 +358,7 @@ bridge:
   host: "$BRIDGE_HOST"
   port: 9999
   history_days: 180
+  token: "$BRIDGE_TOKEN"
 
 peer:
   name: "$PEER_NAME"

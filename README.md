@@ -87,7 +87,9 @@ cd AI-Connect
 
 The script creates a venv, installs `requirements.txt`, writes `~/.config/ai-connect/config.yaml`, and installs and starts `ai-connect.service` (Bridge, port 9999) and `ai-connect-mcp.service` (MCP over HTTP/SSE, port 9998). Clients on other machines must be able to reach port 9999.
 
-> **Security:** the Bridge has no authentication and no encryption — whoever reaches port 9999 can read and send messages under any name. Keep it in a trusted LAN. To connect other people's machines, use a VPN (e.g. WireGuard or Tailscale) instead of opening the port to the internet.
+The script also generates the Bridge token, `bridge.token`, and shows it: every client machine needs the same value. The Bridge refuses every connection without it.
+
+> **Security:** the token keeps out whoever does not have it, but everyone who has it can read and send messages under any name, and the traffic is not encrypted. Keep the Bridge in a trusted LAN. To connect other people's machines, use a VPN (e.g. WireGuard or Tailscale) instead of opening the port to the internet.
 
 ### 2. MCP client (every other machine)
 
@@ -97,7 +99,7 @@ cd AI-Connect
 ./install.sh --client
 ```
 
-It asks for the Bridge machine's IP or hostname and installs `ai-connect-mcp.service`.
+It asks for the Bridge machine's IP or hostname and the Bridge token, and installs `ai-connect-mcp.service`.
 
 `./install.sh --status`, `--update` and `--uninstall` work on both.
 
@@ -225,13 +227,14 @@ claude mcp list                       # is ai-connect registered and connected?
 | "Not connected" | Wrong `bridge.host` | On client machines it must be the Bridge machine's IP, not `0.0.0.0` |
 | Connection refused | Bridge not running | `sudo systemctl start ai-connect` on the Bridge machine |
 | Timeout | Firewall | Open port 9999 on the Bridge machine |
+| `peer_status`: the Bridge refused the token | `bridge.token` differs from the Bridge's | Copy the value from the Bridge machine's config, then restart the client |
 | `peer_status` shows standby | Another session took over the same name | Close one, or set `AI_CONNECT_PEER_NAME`; the standby session takes the name back once the other one leaves |
 
 ## Limitations
 
 - **Waking needs the watcher**: an AI-Connect message does not wake a Claude Code session by itself. The [watcher](#waiting-for-messages) works around this between turns; a turn that is already running is not interrupted, the message is picked up when it ends.
 - **Claude Code's own inbox not used yet**: Claude Code now gives every session an inbox socket, and a message from the session's own child processes wakes it directly ([docs](https://code.claude.com/docs/en/cross-session-messaging#the-sessions-inbox-socket)). The watcher could deliver through it instead of ending; that is not implemented yet.
-- **No authentication or encryption**: see the [security note](#1-bridge-server-one-machine-eg-a-home-server-or-raspberry-pi).
+- **One shared token, no encryption**: see the [security note](#1-bridge-server-one-machine-eg-a-home-server-or-raspberry-pi).
 - **Manual context**: assistants share code only when they call `peer_context`; nobody automatically knows what the others are working on.
 - **Linux with systemd** for the services; other platforms need the services set up by hand.
 

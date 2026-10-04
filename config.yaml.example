@@ -10,6 +10,9 @@ bridge:
   # Bridge machine only: messages older than this many days are deleted
   # from the history, at start and then daily
   history_days: 180
+  # Shared secret: the Bridge refuses every connection without it. The
+  # same value on every machine; generate one with: openssl rand -hex 32
+  token: "replace-with-a-long-random-string"
 
 peer:
   # Name of this machine's HTTP/SSE server in the network. The STDIO client

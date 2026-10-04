@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 from datetime import datetime, timezone
+from http import HTTPStatus
 
 import websockets
 from websockets import ClientConnection
@@ -20,10 +21,11 @@ NOTICE_SENDER = "Bridge"
 class BridgeClient:
     """Keeps the connection to the Bridge Server and queues incoming messages."""
 
-    def __init__(self, host: str, port: int, peer_name: str):
+    def __init__(self, host: str, port: int, peer_name: str, token: str):
         self.host = host
         self.port = port
         self.peer_name = peer_name
+        self._token = token
 
         self._ws: ClientConnection | None = None
         # True only while registered under peer_name
@@ -33,6 +35,9 @@ class BridgeClient:
         # Replaced by another session with the same name: wait until the
         # name is free instead of taking it back
         self._standby = False
+        # The Bridge refused the token; retrying cannot help until the
+        # config is fixed and the client restarted
+        self._token_refused = False
         self._message_queue: list[dict] = []
         self._message_event: asyncio.Event | None = None
         # Answers to requests, keyed by the response type ("peer_list", "history")
@@ -59,6 +64,10 @@ class BridgeClient:
     def standby(self) -> bool:
         return self._standby
 
+    @property
+    def token_refused(self) -> bool:
+        return self._token_refused
+
     async def connect(self) -> bool:
         """Connect to the Bridge and register under peer_name.
 
@@ -66,7 +75,20 @@ class BridgeClient:
         """
         uri = f"ws://{self.host}:{self.port}"
         try:
-            self._ws = await websockets.connect(uri, ping_interval=60, ping_timeout=300)
+            self._ws = await websockets.connect(
+                uri,
+                ping_interval=60,
+                ping_timeout=300,
+                additional_headers={"Authorization": f"Bearer {self._token}"},
+            )
+        except websockets.exceptions.InvalidStatus as e:
+            if e.response.status_code != HTTPStatus.UNAUTHORIZED:
+                raise
+            logger.error(f"Bridge at {uri} refused the token: check bridge.token in config.yaml")
+            self._connected = False
+            self._token_refused = True
+            self._should_reconnect = False
+            return False
         except (OSError, websockets.exceptions.InvalidHandshake) as e:
             logger.error(f"Cannot reach Bridge at {uri}: {e}")
             self._connected = False
@@ -288,11 +310,11 @@ def get_client() -> BridgeClient | None:
     return _client
 
 
-async def init_client(host: str, port: int, peer_name: str) -> BridgeClient:
+async def init_client(host: str, port: int, peer_name: str, token: str) -> BridgeClient:
     """Create the Bridge client and connect; if the Bridge is unreachable,
     keep trying in the background."""
     global _client
-    _client = BridgeClient(host=host, port=port, peer_name=peer_name)
+    _client = BridgeClient(host=host, port=port, peer_name=peer_name, token=token)
     if not await _client.connect():
         _client.start_reconnect()
     return _client
