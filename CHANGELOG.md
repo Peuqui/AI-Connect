@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased] - 2026-10-01
+## [1.0.0] - 2026-10-04
 
 ### Added
 - Release workflow: a tag `v*` builds a GitHub release with two downloads from the same code, `AI-Connect-<tag>-linux.tar.gz` and `AI-Connect-<tag>-windows.zip` (CRLF for `.cmd`/`.ps1`)
