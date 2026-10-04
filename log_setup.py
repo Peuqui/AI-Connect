@@ -21,6 +21,8 @@ def setup_logging(file_name: str, *extra_handlers: logging.Handler) -> None:
         LOG_DIR / file_name,
         maxBytes=rotation["max_megabytes"] * 1024 * 1024,
         backupCount=rotation["backup_count"],
+        # Windows would otherwise use its ANSI code page
+        encoding="utf-8",
     )
     logging.basicConfig(
         level=logging.INFO,

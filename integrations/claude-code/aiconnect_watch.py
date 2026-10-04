@@ -37,6 +37,11 @@ import websockets
 from config_loader import bridge_target, load_config
 from peer_name import session_name
 
+# Claude Code reads the output as UTF-8; on Windows Python writes a pipe in the
+# ANSI code page and fails on characters outside it (an arrow, an emoji)
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
+sys.stderr.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
+
 # Below Claude Code's two-hour limit for background tasks
 MAX_MINUTES = 110
 
