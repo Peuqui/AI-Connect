@@ -7,7 +7,6 @@ server; they differ only in the peer name and the transport.
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Optional
 
 from fastmcp import FastMCP
 
@@ -60,7 +59,7 @@ def create_app(peer_name: str) -> FastMCP:
         return await tools.peer_list()
 
     @mcp.tool()
-    async def peer_send(to: str, message: str, file: Optional[str] = None, lines: Optional[str] = None) -> str:
+    async def peer_send(to: str, message: str, file: str | None = None, lines: str | None = None) -> str:
         """Send a message to another peer.
 
         If you expect an answer, make sure your watcher is running (see
@@ -109,7 +108,7 @@ def create_app(peer_name: str) -> FastMCP:
         return await tools.peer_history(peer, limit)
 
     @mcp.tool()
-    async def peer_context(file: str, lines: Optional[str] = None, message: Optional[str] = None) -> str:
+    async def peer_context(file: str, lines: str | None = None, message: str | None = None) -> str:
         """Share a file, or some of its lines, with every online peer.
 
         The content travels with the message, so peers on other machines

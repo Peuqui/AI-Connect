@@ -3,7 +3,6 @@
 import asyncio
 import json
 import logging
-from typing import Optional
 
 import websockets
 from websockets import ClientConnection
@@ -23,17 +22,17 @@ class BridgeClient:
         self.port = port
         self.peer_name = peer_name
 
-        self._ws: Optional[ClientConnection] = None
+        self._ws: ClientConnection | None = None
         self._connected = False
         self._reconnecting = False
         self._should_reconnect = True
         self._message_queue: list[dict] = []
-        self._message_event: Optional[asyncio.Event] = None
+        self._message_event: asyncio.Event | None = None
         # Answers to requests, keyed by the response type ("peer_list", "history")
         self._pending: dict[str, asyncio.Future] = {}
-        self._receive_task: Optional[asyncio.Task] = None
-        self._ping_task: Optional[asyncio.Task] = None
-        self._reconnect_task: Optional[asyncio.Task] = None
+        self._receive_task: asyncio.Task | None = None
+        self._ping_task: asyncio.Task | None = None
+        self._reconnect_task: asyncio.Task | None = None
 
     def _ensure_event(self) -> asyncio.Event:
         """Create the message event lazily inside the running event loop."""
@@ -88,7 +87,7 @@ class BridgeClient:
         if self._should_reconnect and not self._reconnecting:
             self._reconnect_task = asyncio.create_task(self._reconnect())
 
-    async def send_message(self, to: str, content: str, context: Optional[dict] = None) -> bool:
+    async def send_message(self, to: str, content: str, context: dict | None = None) -> bool:
         """Send a message to a peer (or '*' for every online peer)."""
         if not self._connected:
             return False
@@ -235,10 +234,10 @@ class BridgeClient:
 
 
 # The one client of this MCP server process, used by the tools
-_client: Optional[BridgeClient] = None
+_client: BridgeClient | None = None
 
 
-def get_client() -> Optional[BridgeClient]:
+def get_client() -> BridgeClient | None:
     """Return this process's Bridge client."""
     return _client
 

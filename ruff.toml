@@ -1,0 +1,8 @@
+# The client modules import each other as top-level modules (sys.path set in
+# client/server.py), so ruff must know them as first-party
+target-version = "py310"
+src = [".", "client"]
+
+[lint]
+# Ruff 0.16 dropped E402 from its defaults; keep checking it with every version
+extend-select = ["E402"]

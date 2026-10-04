@@ -33,9 +33,9 @@ from pathlib import Path
 # config_loader lives in the repository root
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-import websockets  # noqa: E402
+import websockets
 
-from config_loader import load_config  # noqa: E402
+from config_loader import load_config
 
 # Below Claude Code's two-hour limit for background tasks
 MAX_MINUTES = 110

@@ -1,11 +1,11 @@
 """SQLite message store of the Bridge: history and offline delivery."""
 
-import aiosqlite
 import json
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+
+import aiosqlite
 
 
 class MessageStore:
@@ -14,7 +14,7 @@ class MessageStore:
     def __init__(self, db_path: str = "~/.config/ai-connect/messages.db"):
         self.db_path = Path(db_path).expanduser()
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._db: Optional[aiosqlite.Connection] = None
+        self._db: aiosqlite.Connection | None = None
 
     async def connect(self) -> None:
         """Open the database and create the table."""
@@ -52,7 +52,7 @@ class MessageStore:
         from_peer: str,
         to_peer: str,
         content: str,
-        context: Optional[dict],
+        context: dict | None,
         delivered: bool
     ) -> dict:
         """Store a message and return it as sent to peers."""
@@ -125,19 +125,22 @@ class MessageStore:
         """The latest messages between two peers, oldest first."""
         cursor = await self._conn.execute(
             """
-            SELECT id, from_peer, to_peer, content, context, timestamp
-            FROM messages
-            WHERE (from_peer = ? AND to_peer = ?)
-               OR (from_peer = ? AND to_peer = ?)
-            ORDER BY timestamp DESC
-            LIMIT ?
+            SELECT * FROM (
+                SELECT id, from_peer, to_peer, content, context, timestamp
+                FROM messages
+                WHERE (from_peer = ? AND to_peer = ?)
+                   OR (from_peer = ? AND to_peer = ?)
+                ORDER BY timestamp DESC
+                LIMIT ?
+            )
+            ORDER BY timestamp
             """,
             (peer1, peer2, peer2, peer1, limit)
         )
         rows = await cursor.fetchall()
 
         messages = []
-        for row in reversed(rows):
+        for row in rows:
             messages.append({
                 "id": row[0],
                 "from": row[1],

@@ -1,8 +1,7 @@
 """MCP tools of AI-Connect, shared by the STDIO client and the HTTP/SSE server."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
 
 from bridge_client import get_client
 
@@ -19,7 +18,7 @@ def _format_bridge_time(timestamp: str) -> str:
     return _format_time(datetime.fromisoformat(timestamp.replace("Z", "+00:00")))
 
 
-def _read_excerpt(file: str, lines: Optional[str]) -> str:
+def _read_excerpt(file: str, lines: str | None) -> str:
     """Read a file, or the line range "start-end" / "line" of it.
 
     Relative paths are resolved against the working directory of this MCP
@@ -35,7 +34,7 @@ def _read_excerpt(file: str, lines: Optional[str]) -> str:
     return "\n".join(text.splitlines()[start - 1:end])
 
 
-def _build_context(file: Optional[str], lines: Optional[str]) -> Optional[dict]:
+def _build_context(file: str | None, lines: str | None) -> dict | None:
     """Context that travels with a message: path, line range and the text itself."""
     if not file:
         return None
@@ -70,7 +69,7 @@ async def peer_list() -> str:
     return "\n".join(lines)
 
 
-async def peer_send(to: str, message: str, file: Optional[str], lines: Optional[str]) -> str:
+async def peer_send(to: str, message: str, file: str | None, lines: str | None) -> str:
     client = get_client()
     if not client or not client.connected:
         return NOT_CONNECTED
@@ -81,7 +80,7 @@ async def peer_send(to: str, message: str, file: Optional[str], lines: Optional[
     if not await client.send_message(to, message, context):
         return "❌ Sending failed, connection to the Bridge lost."
     attached = f" (+ {file}{' lines ' + lines if lines else ''})" if file else ""
-    return f"📤 [{_format_time(datetime.now())}] [{client.peer_name} → {to}]: {message}{attached}"
+    return f"📤 [{_format_time(datetime.now(timezone.utc))}] [{client.peer_name} → {to}]: {message}{attached}"
 
 
 async def peer_read() -> str:
@@ -118,7 +117,7 @@ async def peer_history(peer: str, limit: int) -> str:
     return "\n".join(lines)
 
 
-async def peer_context(file: str, lines: Optional[str], message: Optional[str]) -> str:
+async def peer_context(file: str, lines: str | None, message: str | None) -> str:
     client = get_client()
     if not client or not client.connected:
         return NOT_CONNECTED
@@ -129,7 +128,7 @@ async def peer_context(file: str, lines: Optional[str], message: Optional[str]) 
     content = message or f"Shared {file}" + (f" (lines {lines})" if lines else "")
     if not await client.send_message("*", content, context):
         return "❌ Sharing failed, connection to the Bridge lost."
-    return f"📤 [{_format_time(datetime.now())}] Shared with all online peers: {file}" + (f" lines {lines}" if lines else "")
+    return f"📤 [{_format_time(datetime.now(timezone.utc))}] Shared with all online peers: {file}" + (f" lines {lines}" if lines else "")
 
 
 async def peer_status() -> str:

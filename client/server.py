@@ -17,7 +17,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from mcp_app import create_app  # noqa: E402
+from mcp_app import create_app
 
 # STDIO carries the MCP protocol, so logs go to a file only
 log_dir = Path.home() / ".config" / "ai-connect"
