@@ -1,5 +1,10 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+- `/ai-connect:consult` leaves its waiting loop by itself when the partner has been idle or waiting for 10 minutes (or gone, or silent for 10 minutes if its harness reports no state), sends it a short note and keeps the watcher running for a late answer. Question from Reddit
+
 ## [2.0.0] - 2026-10-04
 
 ### Added

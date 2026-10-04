@@ -33,7 +33,15 @@ This settles both races:
 - `[LGTM]` = agreement / handshake contribution
 - `[CONTINUE]` = not finished yet
 
+## Partner gone quiet
+Waiting is not free: the loop keeps this session busy. So after every 12 empty returns (about 2 minutes), call `peer_list` and look at the partner:
+- shown as `idle` or `waiting` for 10 minutes or more (see "since"), or no longer in the list, and no message from it meanwhile
+- or, if its harness reports no state, no message for 10 minutes
+
+Then leave the loop: send the partner one short note without a tag, e.g. "Leaving consult mode, you have been idle since 14:05. Reply any time, my watcher picks it up.", tell the user why you left, and make sure the watcher is running so a late answer still arrives.
+
 ## Stop
 - Symmetric handshake complete (see above)
+- Partner gone quiet (see above)
 - The user interrupts (ESC, "stop")
 - Do NOT trigger desktop notifications
