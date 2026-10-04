@@ -8,7 +8,7 @@
   "plugins": [
     {
       "name": "ai-connect",
-      "source": ".",
+      "source": "./integrations/claude-code/plugin",
       "description": "MCP server, state hooks and the /consult command for AI-Connect"
     }
   ]

@@ -3,7 +3,7 @@
 ## [Unreleased] - 2026-10-01
 
 ### Added
-- Claude Code plugin: the repository is a plugin marketplace (`.claude-plugin/`); `claude plugin marketplace add <repo>` and `claude plugin install ai-connect@ai-connect` bring the MCP server, the state hooks (`integrations/claude-code/hooks.json`) and `/ai-connect:consult` (was `/consult` via symlink). Replaces `claude mcp add` and hand-written hooks; tool permissions are now named `mcp__plugin_ai-connect_ai-connect__*`
+- Claude Code plugin: the repository is a plugin marketplace (`.claude-plugin/`); `claude plugin marketplace add <repo>` and `claude plugin install ai-connect@ai-connect` bring the MCP server, the state hooks and `/ai-connect:consult` (was `/consult` via symlink). The plugin is the small directory `integrations/claude-code/plugin/` (manifest, `hooks.json`, `commands/consult.md`); its MCP server runs the repository's venv, so Claude Code's install copy stays a few KB instead of the whole repository with its venv. Replaces `claude mcp add` and hand-written hooks; tool permissions are now named `mcp__plugin_ai-connect_ai-connect__*`
 - `peer_name.py`: one naming rule for the STDIO client and the watcher. The project comes from `CLAUDE_PROJECT_DIR` when Claude Code sets it, because a plugin's MCP server runs in the plugin directory
 - Peer state and status line: `peer_set_status` (one line on the current work) and `peer_set_state` (busy / idle / waiting, reported by hooks; for Claude Code `mcp_tool` hooks on UserPromptSubmit, PostToolUse, Notification and Stop); `peer_list` shows both. `peer_notify_when_idle` asks the Bridge for one message as soon as a peer is done or waits for an approval, across machines. The client resends state and status after every reconnect
 - Bridge token: the Bridge refuses every connection whose handshake lacks `Authorization: Bearer <bridge.token>` (clients, HTTP/SSE server and watcher send it). `install.sh` generates the token on the Bridge machine and asks for it on clients. New required key `bridge.token`; a refused client stops reconnecting and `peer_status` says why
@@ -21,6 +21,7 @@
 - Logs of the MCP clients are rotated by size (`logging.max_megabytes`, `logging.backup_count`); each STDIO client writes its own `mcp-<Host>_<Project>.log` instead of all sessions sharing `mcp.log` (a rotated file must have a single writer, and the shared file did not show which session wrote a line)
 
 ### Fixed
+- `install.sh --update` installed the newest fastmcp (4.0.10), which broke `ai-connect-mcp.service` (ImportError); `requirements.txt` pins `fastmcp>=2.14,<3`
 - A session replaced by a newer one with the same name stayed offline for good, even after the newer one had left (2026-10-04: a short second instance of the archimedes-lander session left the running one unreachable); it now waits on standby (`register` with `standby`, Bridge answers `standby` and later `name_free`) and takes the name back. Both sessions get a notice from `Bridge`
 - The watcher read the Bridge's database file and therefore worked on the Bridge machine only; it now asks the Bridge over the network (`watch`, no registration) and works on every machine, pushed instead of polling every 5 s
 - `peer_send` with a file and `peer_context` sent only the path and line numbers; the file content (or the given lines) now travels with the message

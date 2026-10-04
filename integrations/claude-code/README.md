@@ -19,9 +19,14 @@ The plugin brings:
 - the **state hooks**: they call `peer_set_state` on prompt submit and after each tool (busy), on a permission prompt (waiting) and when a turn ends (idle), so other peers see the state in `peer_list` and `peer_notify_when_idle` can tell them when this session is done
 - the **`/ai-connect:consult`** command
 
-Add the marketplace from the local directory, not from GitHub: Claude Code then runs the plugin in place, with this installation's venv and config, and `git pull` updates it (takes effect in new sessions or after `/reload-plugins`).
+Add the marketplace from the local directory, not from GitHub: the plugin (`plugin/` here) runs this installation's venv, and `git pull` updates it (takes effect in new sessions or after `/reload-plugins`). Tested with Claude Code 2.1.289; older versions such as 2.1.50 reject the manifest, so check `claude --version` first, and make sure no outdated second `claude` (e.g. an old npm install) comes first in `PATH`.
 
-If AI-Connect was registered with `claude mcp add` before, remove that entry (`claude mcp remove -s user ai-connect`): while it exists, Claude Code suppresses the plugin's server as a duplicate, and the state hooks find no server.
+Coming from an earlier setup:
+
+- Remove a `claude mcp add` registration (`claude mcp remove -s user ai-connect`): while it exists, Claude Code suppresses the plugin's server as a duplicate, and the state hooks find no server.
+- Remove old command links in `~/.claude/commands/` (`consult.md`, or `beratung.md` from before the rename); the command is now `/ai-connect:consult`.
+- Rename tool permissions from `mcp__ai-connect__…` to `mcp__plugin_ai-connect_ai-connect__…`.
+- Delete hooks you added by hand for `peer_set_state`; the plugin brings them.
 
 ### 2. Include the behaviour rules
 
