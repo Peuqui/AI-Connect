@@ -1,15 +1,10 @@
 # Changelog
 
-## [Unreleased]
-
-### Changed
-- No blocking wait any more: the `/ai-connect:consult` command and the `peer_wait` tool are removed. Sessions send, end their turn and are woken by the watcher; `peer_notify_when_idle` tells them when a partner is done. The "second opinion" guidance moved into the behaviour rules
-
 ## [2.0.0] - 2026-10-04
 
 ### Added
 - Release workflow: a tag `v*` builds a GitHub release with two downloads from the same code, `AI-Connect-<tag>-linux.tar.gz` and `AI-Connect-<tag>-windows.zip` (CRLF for `.cmd`/`.ps1`, without developer files such as `.github/`)
-- Claude Code plugin `ai-connect@ai-connect` (`integrations/claude-code/plugin/`, the repository is its local marketplace): state hooks and `/ai-connect:consult` (was `/consult` via symlink). It does not ship the MCP server, whose Python path differs between Linux and Windows; the installer registers that
+- Claude Code plugin `ai-connect@ai-connect` (`integrations/claude-code/plugin/`, the repository is its local marketplace) with the state hooks. It does not ship the MCP server, whose Python path differs between Linux and Windows; the installer registers that
 - `peer_name.py`: one naming rule for the STDIO client and the watcher (project from `CLAUDE_PROJECT_DIR` when Claude Code sets it). The client records its name per session (`~/.config/ai-connect/sessions/<pid>`), the watcher looks it up by `CLAUDE_PID`, so it no longer reads `/proc` and works on Windows too
 - `installer.py`: the platform-independent installation steps (write and check the config, generate or ask for the token, register MCP server and plugin with Claude Code, remove them again), used by `install.sh` and the Windows installer
 - Peer state and status line: `peer_set_status` (one line on the current work) and `peer_set_state` (busy / idle / waiting, reported by hooks; for Claude Code `mcp_tool` hooks on UserPromptSubmit, PostToolUse, Notification and Stop); `peer_list` shows both. `peer_notify_when_idle` asks the Bridge for one message as soon as a peer is done or waits for an approval, across machines. The client resends state and status after every reconnect
@@ -20,6 +15,7 @@
 - `config_loader.py`: one config loader for the Bridge and both MCP clients
 
 ### Changed
+- No blocking wait any more: the `/ai-connect:consult` command and the `peer_wait` tool are removed. Sessions send, end their turn and are woken by the watcher; `peer_notify_when_idle` tells them when a partner is done. The "second opinion" guidance moved into the behaviour rules
 - Windows installer `install.cmd` / `install.ps1`, tested on Windows 11 (client and server): the same modes as `install.sh`; services as scheduled tasks (start at logon, no console window, restart on failure, as the user); tasks and the firewall rule for port 9999 (private networks only) need administrator rights, so the script restarts itself elevated through UAC. Clients on the Bridge machine connect to 127.0.0.1 when `bridge.host` is 0.0.0.0, which Windows refuses as a target
 - The watcher's "no peer name" error says to restart the session (or reconnect `ai-connect` in `/mcp`) after an update, because the running MCP client records its name only at start
 - `install.sh` reworked: `--client` installs venv, config and the Claude Code registration only, with no service and no sudo; `--server` adds the Bridge service; `--http` adds the HTTP/SSE service for other MCP clients (was installed on every machine)
