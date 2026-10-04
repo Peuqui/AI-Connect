@@ -29,6 +29,12 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+# On any error: show it, and keep an elevated window open so it can be read
+trap {
+    Write-Host "Error: $_" -ForegroundColor Red
+    if ($Elevated) { Read-Host 'Press Enter to close this window' | Out-Null }
+    exit 1
+}
 $Repo = $PSScriptRoot
 $Python = Join-Path $Repo 'venv\Scripts\python.exe'
 # pythonw.exe runs without a console window
@@ -132,10 +138,22 @@ function Uninstall-AIConnect {
     if (Test-Path $Python) {
         Invoke-Native $Python @((Join-Path $Repo 'installer.py'), 'unregister')
     }
-    $DeleteConfig = Read-Host "Delete the config ($(Split-Path $ConfigFile)) too? [y/N]"
+    $ConfigDir = Split-Path $ConfigFile
+    $DeleteConfig = Read-Host "Delete $ConfigDir with everything in it (config, token, logs, message history)? [y/N]"
     if ($DeleteConfig -match '^[yY]$') {
-        Remove-Item -Recurse -Force (Split-Path $ConfigFile)
-        Write-Host '  Config deleted' -ForegroundColor Green
+        # One by one: a running Claude Code session keeps its MCP client's
+        # log open, and Windows does not delete open files
+        $Locked = @()
+        foreach ($Item in Get-ChildItem $ConfigDir -Recurse -File) {
+            try { Remove-Item $Item.FullName -Force } catch { $Locked += $Item.FullName }
+        }
+        if ($Locked) {
+            Write-Host '  In use, delete after closing Claude Code:' -ForegroundColor Yellow
+            $Locked | ForEach-Object { Write-Host "    $_" }
+        } else {
+            Remove-Item -Recurse -Force $ConfigDir
+            Write-Host '  Config deleted' -ForegroundColor Green
+        }
     }
     Write-Host ''
     Write-Host "The venv stays; remove it with: Remove-Item -Recurse $(Join-Path $Repo 'venv')"
