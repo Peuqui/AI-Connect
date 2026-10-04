@@ -1,0 +1,35 @@
+# Builds the two downloads of a release from one tag:
+#   AI-Connect-<tag>-linux.tar.gz  (install.sh)
+#   AI-Connect-<tag>-windows.zip   (install.cmd, CRLF line endings)
+# Both contain the same code; only the archive format and line endings
+# differ. Triggered by pushing a tag such as v1.0.0.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build archives
+        run: |
+          NAME="AI-Connect-${GITHUB_REF_NAME}"
+          git archive --format=tar.gz --prefix="$NAME/" -o "$NAME-linux.tar.gz" "$GITHUB_REF_NAME"
+          # git archive applies .gitattributes: .cmd/.ps1 get CRLF in the zip
+          git -c core.autocrlf=false archive --format=zip --prefix="$NAME/" -o "$NAME-windows.zip" "$GITHUB_REF_NAME"
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NAME="AI-Connect-${GITHUB_REF_NAME}"
+          gh release create "$GITHUB_REF_NAME" "$NAME-linux.tar.gz" "$NAME-windows.zip" \
+            --title "AI-Connect $GITHUB_REF_NAME" \
+            --notes "Linux: unpack the .tar.gz, run ./install.sh. Windows: unpack the .zip, double-click install.cmd. See README for client, server and options."

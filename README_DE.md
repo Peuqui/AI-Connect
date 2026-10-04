@@ -77,6 +77,8 @@ Beides lässt sich parallel nutzen. (Stand: Claude Code 2.1.289, Oktober 2026.)
 
 **Voraussetzungen:** Python 3.10+ und git. Linux oder Windows. Ein Rechner betreibt den Bridge Server; jeder Rechner, dessen KI-Assistent mit den anderen sprechen soll, bekommt den Client. Der Bridge-Rechner bekommt den Client automatisch mit.
 
+Statt `git clone` geht auch ein Download von der Seite [Releases](https://github.com/Peuqui/AI-Connect/releases): das `.tar.gz` für Linux, das `.zip` für Windows.
+
 ### 1. Bridge Server (ein Rechner, z.B. Heimserver oder Raspberry Pi)
 
 ```bash

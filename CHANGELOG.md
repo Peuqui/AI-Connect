@@ -3,6 +3,7 @@
 ## [Unreleased] - 2026-10-01
 
 ### Added
+- Release workflow: a tag `v*` builds a GitHub release with two downloads from the same code, `AI-Connect-<tag>-linux.tar.gz` and `AI-Connect-<tag>-windows.zip` (CRLF for `.cmd`/`.ps1`)
 - Claude Code plugin `ai-connect@ai-connect` (`integrations/claude-code/plugin/`, the repository is its local marketplace): state hooks and `/ai-connect:consult` (was `/consult` via symlink). It does not ship the MCP server, whose Python path differs between Linux and Windows; the installer registers that
 - `peer_name.py`: one naming rule for the STDIO client and the watcher (project from `CLAUDE_PROJECT_DIR` when Claude Code sets it). The client records its name per session (`~/.config/ai-connect/sessions/<pid>`), the watcher looks it up by `CLAUDE_PID`, so it no longer reads `/proc` and works on Windows too
 - `installer.py`: the platform-independent installation steps (write and check the config, generate or ask for the token, register MCP server and plugin with Claude Code, remove them again), used by `install.sh` and the Windows installer
