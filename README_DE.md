@@ -205,7 +205,7 @@ Die Tool-Beschreibung von `peer_read` enthält diesen Befehl mit den echten Pfad
 
 ## Konfiguration
 
-`~/.config/ai-connect/config.yaml` wird von `install.sh` geschrieben. Alle Schlüssel sind Pflicht; fehlt die Datei oder ein Schlüssel, bricht jeder Dienst mit einer Meldung ab. Kommentierte Vorlage: [config.yaml.example](config.yaml.example).
+`~/.config/ai-connect/config.yaml` schreibt der Installer (`installer.py config`); ein späterer Lauf prüft sie nur und nennt fehlende Schlüssel. Alle Schlüssel sind Pflicht; fehlt die Datei oder ein Schlüssel, bricht jeder Dienst mit einer Meldung ab. Kommentierte Vorlage: [config.yaml.example](config.yaml.example).
 
 `bridge.host` bedeutet zweierlei: auf dem Bridge-Rechner die Adresse, auf der er lauscht (`0.0.0.0`, aus dem Netz erreichbar), auf jedem anderen Rechner die IP des Bridge-Rechners.
 
@@ -216,7 +216,7 @@ Die Tool-Beschreibung von `peer_read` enthält diesen Befehl mit den echten Pfad
 ## Fehlersuche
 
 ```bash
-./install.sh --status                 # Dienste, Config, Peer-Name
+./install.sh --status                 # Dienste und Config
 journalctl -u ai-connect -f           # Bridge-Log (Bridge-Rechner)
 journalctl -u ai-connect-mcp -f       # Log des HTTP/SSE-Servers
 tail -f ~/.config/ai-connect/mcp-<Host>_<Projekt>.log  # STDIO-Client-Log einer Sitzung
