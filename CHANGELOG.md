@@ -15,6 +15,7 @@
 - `config_loader.py`: one config loader for the Bridge and both MCP clients
 
 ### Changed
+- The watcher starts by itself: the plugin runs it as an `asyncRewake` hook at session start and after every turn, and its exit wakes the session. Sessions no longer start and restart it (the rule and the 110-minute limit are gone). One watcher per session (the Bridge turns away a second), a message that arrived while no watcher ran is reported at once (`peer_read` records the read state), and it reconnects after a Bridge restart
 - No blocking wait any more: the `/ai-connect:consult` command and the `peer_wait` tool are removed. Sessions send, end their turn and are woken by the watcher; `peer_notify_when_idle` tells them when a partner is done. The "second opinion" guidance moved into the behaviour rules
 - Windows installer `install.cmd` / `install.ps1`, tested on Windows 11 (client and server): the same modes as `install.sh`; services as scheduled tasks (start at logon, no console window, restart on failure, as the user); tasks and the firewall rule for port 9999 (private networks only) need administrator rights, so the script restarts itself elevated through UAC. Clients on the Bridge machine connect to 127.0.0.1 when `bridge.host` is 0.0.0.0, which Windows refuses as a target
 - The watcher's "no peer name" error says to restart the session (or reconnect `ai-connect` in `/mcp`) after an update, because the running MCP client records its name only at start

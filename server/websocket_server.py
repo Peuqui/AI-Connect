@@ -46,6 +46,9 @@ class BridgeServer:
         # Watchers per peer name: connections that want to hear about new
         # messages for that peer without registering as it
         self._watchers: dict[str, set[ServerConnection]] = {}
+        # The Claude Code session each watcher belongs to: one watcher per
+        # session, because its hooks start one at every turn end
+        self._watcher_sessions: dict[ServerConnection, str] = {}
         # Standby connections per peer name: replaced sessions that wait for
         # the name to become free again
         self._standby: dict[str, set[ServerConnection]] = {}
@@ -140,8 +143,20 @@ class BridgeServer:
                     if not watched:
                         await self._send_error(websocket, "'watch' needs a 'peer'")
                         continue
+                    session = message.get("session")
+                    if session and session in self._watcher_sessions.values():
+                        await websocket.send(json.dumps({"type": "already_watching", "peer": watched}))
+                        continue
                     self._watchers.setdefault(watched, set()).add(websocket)
+                    if session:
+                        self._watcher_sessions[websocket] = session
                     await websocket.send(json.dumps({"type": "watching", "peer": watched}))
+                    # A message that came after the session last read, while
+                    # no watcher ran, wakes the session at once
+                    since = message.get("since")
+                    missed = await self.store.latest_to_since(watched, since) if since else None
+                    if missed:
+                        await websocket.send(json.dumps({**missed, "type": "message"}))
 
                 elif msg_type == "list_peers":
                     await websocket.send(json.dumps({
@@ -200,6 +215,7 @@ class BridgeServer:
         finally:
             for connections in (*self._watchers.values(), *self._standby.values()):
                 connections.discard(websocket)
+            self._watcher_sessions.pop(websocket, None)
             logger.info(f"Connection closed: {peer_name or client_ip}")
             # Only remove the peer if this connection is still the active one;
             # after a takeover the name belongs to the new connection.

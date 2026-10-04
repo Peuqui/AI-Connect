@@ -40,6 +40,18 @@ def session_name(session_pid: str) -> str | None:
     return path.read_text(encoding="utf-8") if path.exists() else None
 
 
+def record_seen(session_pid: int | str, timestamp: str) -> None:
+    """Note up to which Bridge timestamp the session has seen its messages."""
+    SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
+    (SESSIONS_DIR / f"{session_pid}.seen").write_text(timestamp, encoding="utf-8")
+
+
+def seen_since(session_pid: int | str) -> str | None:
+    """The Bridge timestamp the session has seen its messages up to, if any."""
+    path = SESSIONS_DIR / f"{session_pid}.seen"
+    return path.read_text(encoding="utf-8") if path.exists() else None
+
+
 def session_pid() -> int:
     """Process id of the session (Claude Code) that started this MCP client.
 

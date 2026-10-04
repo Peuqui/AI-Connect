@@ -1,25 +1,21 @@
 #!/usr/bin/env python3
-"""Exit as soon as a new AI-Connect message for this peer arrives.
+"""Wake the Claude Code session when an AI-Connect message for it arrives.
 
-Claude Code is not woken by incoming peer messages. Started as a background
-task, this script ends when a message arrives, and the finished task wakes the
-session. It asks the Bridge over the network to be told about messages for
-the peer, without registering as that peer, so it works on every machine and
-cannot take over the peer name. While it waits it costs nothing: the Bridge
+The AI-Connect plugin starts this as an asyncRewake hook at session start
+and after every turn: when it exits with code 2, Claude Code wakes the
+session and shows it what this script printed. It asks the Bridge to be told
+about messages for the session's peer, without registering as that peer, so
+it cannot take over the name. While it waits it costs nothing: the Bridge
 pushes, nothing polls.
 
-It also exits when the connection to the Bridge drops (e.g. a Bridge
-restart), and after MAX_MINUTES without a message: Claude Code kills
-background tasks after two hours, and a killed watcher would leave the
-session deaf. Either way the session simply starts it again.
+- One watcher per session: the Bridge turns away a second one, which then
+  exits quietly (code 0).
+- A message that came after the session last read (peer_read), while no
+  watcher ran, is reported at once.
+- When the Bridge goes away (a restart), it reconnects by itself.
 
-Exit codes: 0 = message arrived (restart, then peer_read), 2 = time limit
-reached (restart, nothing to read), 1 = error.
-
-Usage: aiconnect_watch.py [PEER_NAME]
-Without PEER_NAME it watches for the name the AI-Connect MCP client of this
-Claude Code session registered with (see session_peer_name), else for
-AI_CONNECT_PEER_NAME. It prints the name it watches for when it starts.
+Exit codes: 2 = message (wakes the session), 0 = another watcher runs,
+1 = error.
 """
 
 import asyncio
@@ -35,73 +31,73 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import websockets
 
 from config_loader import bridge_target, load_config
-from peer_name import session_name
+from peer_name import record_seen, seen_since, session_name
 
 # Claude Code reads the output as UTF-8; on Windows Python writes a pipe in the
 # ANSI code page and fails on characters outside it (an arrow, an emoji)
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
 sys.stderr.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
 
-# Below Claude Code's two-hour limit for background tasks
-MAX_MINUTES = 110
+# Wait between reconnects after the Bridge went away
+RECONNECT_SECONDS = 5
+# How long to wait at session start for the MCP client to record its name
+NAME_WAIT_SECONDS = 60
 
 
-def session_peer_name() -> str | None:
-    """The name the MCP client of this Claude Code session registered with.
+
+async def session_peer(session: str) -> str | None:
+    """The name the MCP client of this session registered with.
 
     The client records it under the session's process id (peer_name.py),
-    and Claude Code passes that id to commands as CLAUDE_PID. The shell
-    running this script may sit in any directory (a worktree, another
-    project), so its own directory proves nothing: on 2026-09-29 a watcher
-    started from a worktree listened for "Mini:1Cat-vLLM-upstream" and
-    missed every message.
+    and Claude Code passes that id to hooks as CLAUDE_PID. At session start
+    the client may still be starting, so this waits for it.
     """
-    claude_pid = os.environ.get("CLAUDE_PID")
-    return session_name(claude_pid) if claude_pid else None
+    for _ in range(NAME_WAIT_SECONDS):
+        name = session_name(session)
+        if name:
+            return name
+        await asyncio.sleep(1)
+    return None
 
 
-async def watch(peer: str) -> None:
+async def watch(session: str) -> None:
+    peer = await session_peer(session)
+    if peer is None:
+        sys.exit("aiconnect_watch.py: this session has no AI-Connect MCP client (no name recorded)")
     bridge = load_config()["bridge"]
     uri = f"ws://{bridge_target(bridge['host'])}:{bridge['port']}"
     headers = {"Authorization": f"Bearer {bridge['token']}"}
-    async with websockets.connect(uri, additional_headers=headers) as ws:
-        await ws.send(json.dumps({"type": "watch", "peer": peer}))
-        async for raw in ws:
-            data = json.loads(raw)
-            if data.get("type") == "watching":
-                print(f"watching for messages to {peer} via {uri}", flush=True)
-            elif data.get("type") == "error":
-                sys.exit(f"aiconnect_watch.py: Bridge refused: {data.get('error')}")
-            elif data.get("type") == "message":
-                received = datetime.fromisoformat(data["timestamp"].replace("Z", "+00:00"))
-                local = received.astimezone().strftime("%H:%M:%S.%f")[:-3]
-                print(f"[{local}] {data['from']} -> {data['to']}: {data['content']}")
-                return
-    sys.exit("aiconnect_watch.py: connection to the Bridge closed - start the watcher again")
+    while True:
+        try:
+            async with websockets.connect(uri, additional_headers=headers) as ws:
+                await ws.send(json.dumps({"type": "watch", "peer": peer, "session": session, "since": seen_since(session)}))
+                async for raw in ws:
+                    data = json.loads(raw)
+                    if data.get("type") == "already_watching":
+                        return
+                    if data.get("type") == "error":
+                        sys.exit(f"aiconnect_watch.py: Bridge refused: {data.get('error')}")
+                    if data.get("type") == "message":
+                        record_seen(session, data["timestamp"])
+                        received = datetime.fromisoformat(data["timestamp"].replace("Z", "+00:00"))
+                        local = received.astimezone().strftime("%H:%M:%S")
+                        print(
+                            f"AI-Connect message for {peer} [{local}] from {data['from']}: {data['content']}\n"
+                            "Call peer_read for all new messages, then react."
+                        )
+                        sys.exit(2)
+        except websockets.exceptions.InvalidStatus as e:
+            sys.exit(f"aiconnect_watch.py: Bridge refused the connection ({e}) - check bridge.token in config.yaml")
+        except (OSError, websockets.exceptions.ConnectionClosed):
+            pass
+        await asyncio.sleep(RECONNECT_SECONDS)
 
 
 def main() -> None:
-    peer = (
-        sys.argv[1]
-        if len(sys.argv) > 1
-        else session_peer_name() or os.environ.get("AI_CONNECT_PEER_NAME")
-    )
-    if not peer:
-        sys.exit(
-            "aiconnect_watch.py: no peer name. The session's MCP client records it at "
-            "start, so after an AI-Connect update restart the session (or reconnect "
-            "ai-connect in /mcp). Otherwise pass the name as the first argument or "
-            "set AI_CONNECT_PEER_NAME"
-        )
-    try:
-        asyncio.run(asyncio.wait_for(watch(peer), timeout=MAX_MINUTES * 60))
-    except asyncio.TimeoutError:
-        print(f"no message for {MAX_MINUTES} min - start the watcher again, nothing to read")
-        sys.exit(2)
-    except OSError as e:
-        sys.exit(f"aiconnect_watch.py: cannot reach the Bridge: {e}")
-    except websockets.exceptions.InvalidStatus as e:
-        sys.exit(f"aiconnect_watch.py: Bridge refused the connection ({e}) - check bridge.token in config.yaml")
+    session = os.environ.get("CLAUDE_PID")
+    if session is None:
+        sys.exit("aiconnect_watch.py: run by the AI-Connect plugin's hooks inside a Claude Code session (no CLAUDE_PID)")
+    asyncio.run(watch(session))
 
 
 if __name__ == "__main__":
