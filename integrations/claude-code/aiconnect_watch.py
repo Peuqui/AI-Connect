@@ -25,7 +25,6 @@ AI_CONNECT_PEER_NAME. It prints the name it watches for when it starts.
 import asyncio
 import json
 import os
-import socket
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -36,6 +35,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import websockets
 
 from config_loader import load_config
+from peer_name import peer_name
 
 # Below Claude Code's two-hour limit for background tasks
 MAX_MINUTES = 110
@@ -45,11 +45,11 @@ def session_peer_name() -> str | None:
     """The name the MCP client of this Claude Code session registered with.
 
     Claude Code starts the MCP client (client/server.py) as its child; the
-    client names itself from AI_CONNECT_PEER_NAME or from its own start
-    directory, which never changes. The shell running this script may sit in
-    any directory (a worktree, another project), so its own directory proves
-    nothing: on 2026-09-29 a watcher started from a worktree listened for
-    "Mini:1Cat-vLLM-upstream" and missed every message.
+    name follows from the client's environment and start directory by the
+    same rule the client uses (peer_name.py). The shell running this script
+    may sit in any directory (a worktree, another project), so its own
+    directory proves nothing: on 2026-09-29 a watcher started from a
+    worktree listened for "Mini:1Cat-vLLM-upstream" and missed every message.
     """
     claude_pid = os.environ.get("CLAUDE_PID")
     if claude_pid is None:
@@ -59,12 +59,9 @@ def session_peer_name() -> str | None:
             args = Path(f"/proc/{child}/cmdline").read_bytes().split(b"\0")
             if not any(arg.endswith(b"client/server.py") for arg in args):
                 continue
-            environ = Path(f"/proc/{child}/environ").read_bytes().split(b"\0")
-            for entry in environ:
-                if entry.startswith(b"AI_CONNECT_PEER_NAME="):
-                    return entry.split(b"=", 1)[1].decode()
-            directory = Path(os.readlink(f"/proc/{child}/cwd")).name
-            return f"{socket.gethostname()}:{directory}"
+            entries = Path(f"/proc/{child}/environ").read_bytes().split(b"\0")
+            environ = dict(entry.decode().split("=", 1) for entry in entries if b"=" in entry)
+            return peer_name(environ, Path(os.readlink(f"/proc/{child}/cwd")))
     return None
 
 

@@ -52,4 +52,4 @@ Order does not matter.
 
 ## Slash command
 
-`/consult` starts the long-poll loop (`peer_wait`) for an active consultation. See `commands/consult.md`.
+`/ai-connect:consult` starts the long-poll loop (`peer_wait`) for an active consultation. See `commands/consult.md`.

@@ -1,0 +1,15 @@
+{
+  "name": "ai-connect",
+  "owner": {
+    "name": "Peuqui",
+    "url": "https://github.com/Peuqui"
+  },
+  "description": "AI-Connect: self-hosted messaging between AI coding sessions",
+  "plugins": [
+    {
+      "name": "ai-connect",
+      "source": ".",
+      "description": "MCP server, state hooks and the /consult command for AI-Connect"
+    }
+  ]
+}

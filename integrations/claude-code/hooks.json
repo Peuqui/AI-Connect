@@ -1,0 +1,62 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "mcp_tool",
+            "server": "plugin:ai-connect:ai-connect",
+            "tool": "peer_set_state",
+            "input": {
+              "state": "busy"
+            }
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "mcp_tool",
+            "server": "plugin:ai-connect:ai-connect",
+            "tool": "peer_set_state",
+            "input": {
+              "state": "busy"
+            }
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "matcher": "permission_prompt",
+        "hooks": [
+          {
+            "type": "mcp_tool",
+            "server": "plugin:ai-connect:ai-connect",
+            "tool": "peer_set_state",
+            "input": {
+              "state": "waiting",
+              "detail": "${message}"
+            }
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "mcp_tool",
+            "server": "plugin:ai-connect:ai-connect",
+            "tool": "peer_set_state",
+            "input": {
+              "state": "idle"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
