@@ -44,12 +44,15 @@ def session_pid() -> int:
     """Process id of the session (Claude Code) that started this MCP client.
 
     That is the parent, except on Windows: there a venv's python.exe is a
-    launcher that starts the real interpreter as its child and marks it with
-    __PYVENV_LAUNCHER__, so the session is the launcher's parent.
+    launcher that starts the real interpreter as its child, so when the
+    parent is itself a python.exe, the session is the launcher's parent.
+    (The launcher's __PYVENV_LAUNCHER__ is gone by the time Python runs.)
     """
     parent = os.getppid()
-    if sys.platform == "win32" and "__PYVENV_LAUNCHER__" in os.environ:
-        return _windows_parent_of(parent)
+    if sys.platform == "win32":
+        launcher_parent, exe = _windows_process(parent)
+        if exe.lower() in ("python.exe", "pythonw.exe"):
+            return launcher_parent
     return parent
 
 
@@ -72,8 +75,8 @@ if sys.platform == "win32":
             ("szExeFile", ctypes.c_wchar * 260),
         ]
 
-    def _windows_parent_of(pid: int) -> int:
-        """Parent process id of pid, from a Toolhelp snapshot of all processes."""
+    def _windows_process(pid: int) -> tuple[int, str]:
+        """Parent process id and executable name of pid, from a Toolhelp snapshot."""
         kernel32 = ctypes.windll.kernel32
         kernel32.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
         snapshot = kernel32.CreateToolhelp32Snapshot(0x2, 0)  # TH32CS_SNAPPROCESS
@@ -83,7 +86,7 @@ if sys.platform == "win32":
             found = kernel32.Process32FirstW(snapshot, ctypes.byref(entry))
             while found:
                 if entry.th32ProcessID == pid:
-                    return int(entry.th32ParentProcessID)
+                    return int(entry.th32ParentProcessID), entry.szExeFile
                 found = kernel32.Process32NextW(snapshot, ctypes.byref(entry))
         finally:
             kernel32.CloseHandle(snapshot)
