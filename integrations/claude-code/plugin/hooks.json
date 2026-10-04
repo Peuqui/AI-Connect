@@ -54,6 +54,22 @@
             "input": {
               "state": "idle"
             }
+          },
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/watch.sh\"",
+            "asyncRewake": true
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/watch.sh\"",
+            "asyncRewake": true
           }
         ]
       }

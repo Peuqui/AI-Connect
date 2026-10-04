@@ -127,6 +127,30 @@ class MessageStore:
         await self._conn.commit()
         return cursor.rowcount
 
+    async def latest_to_since(self, peer: str, since: str) -> dict | None:
+        """The newest message to peer (or to everyone, from someone else) after since."""
+        cursor = await self._conn.execute(
+            """
+            SELECT id, from_peer, to_peer, content, context, timestamp
+            FROM messages
+            WHERE (to_peer = ? OR (to_peer = '*' AND from_peer != ?)) AND timestamp > ?
+            ORDER BY timestamp DESC
+            LIMIT 1
+            """,
+            (peer, peer, since)
+        )
+        row = await cursor.fetchone()
+        if row is None:
+            return None
+        return {
+            "id": row[0],
+            "from": row[1],
+            "to": row[2],
+            "content": row[3],
+            "context": json.loads(row[4]) if row[4] else None,
+            "timestamp": row[5]
+        }
+
     async def get_history(
         self,
         peer1: str,

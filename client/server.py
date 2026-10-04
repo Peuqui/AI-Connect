@@ -35,6 +35,7 @@ def main() -> None:
         # Windows ends them hard; the file then stays until the next session
         # with that process id overwrites it.
         session_file.unlink(missing_ok=True)
+        session_file.with_suffix(".seen").unlink(missing_ok=True)
         signal.signal(signal.SIGTERM, signal.SIG_DFL)
         os.kill(os.getpid(), signal.SIGTERM)
 
@@ -43,6 +44,7 @@ def main() -> None:
         mcp.run()
     finally:
         session_file.unlink(missing_ok=True)
+        session_file.with_suffix(".seen").unlink(missing_ok=True)
 
 
 if __name__ == "__main__":

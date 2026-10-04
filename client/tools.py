@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from bridge_client import get_client
+from peer_name import record_seen, session_pid
 
 NOT_CONNECTED = "❌ Not connected to the Bridge Server (peer_status shows why)."
 
@@ -124,6 +125,10 @@ async def peer_read() -> str:
     messages = client.pop_messages()
     if not messages:
         return "📭 No new messages."
+    # The watcher started at the next turn end reports only what came later
+    from_bridge = [m["timestamp"] for m in messages if "id" in m]
+    if from_bridge:
+        record_seen(session_pid(), max(from_bridge))
     return _format_messages(messages, client.peer_name)
 
 
