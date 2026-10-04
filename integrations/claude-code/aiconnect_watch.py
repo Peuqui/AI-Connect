@@ -83,9 +83,10 @@ def main() -> None:
     )
     if not peer:
         sys.exit(
-            "aiconnect_watch.py: no peer name - pass it as the first argument, "
-            "run it inside a Claude Code session with the AI-Connect MCP client, "
-            "or set AI_CONNECT_PEER_NAME"
+            "aiconnect_watch.py: no peer name. The session's MCP client records it at "
+            "start, so after an AI-Connect update restart the session (or reconnect "
+            "ai-connect in /mcp). Otherwise pass the name as the first argument or "
+            "set AI_CONNECT_PEER_NAME"
         )
     try:
         asyncio.run(asyncio.wait_for(watch(peer), timeout=MAX_MINUTES * 60))
