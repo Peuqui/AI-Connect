@@ -78,8 +78,8 @@ def write_config(server: bool) -> None:
     # themselves Host:Project
     config["peer"]["name"] = _ask("Peer name of this machine's HTTP/SSE server", socket.gethostname())
     if server:
-        # On the Bridge machine bridge.host is both the listen address and
-        # the address the local clients connect to; 0.0.0.0 serves both,
+        # On the Bridge machine bridge.host is both the listen address and,
+        # mapped by config_loader.bridge_target, the local clients' target;
         # 127.0.0.1 would lock out every other machine
         config["bridge"]["host"] = _ask("Bridge listen address", "0.0.0.0")
         config["bridge"]["token"] = secrets.token_hex(32)
