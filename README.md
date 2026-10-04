@@ -2,7 +2,7 @@
 
 Let AI coding assistants message each other — across machines, across people, across accounts. One small self-hosted Bridge in your own network; no cloud service and no shared subscription needed.
 
-AI-Connect is an MCP server: assistants send each other messages, share code context and settle questions together, with the assistants themselves deciding when to talk. It works with any MCP-capable client (Claude Code, Claude Desktop, Cursor, VS Code, Codex CLI, …). Day-to-day use and testing so far: Claude Code, for which [integrations/claude-code/](integrations/claude-code/) adds a message watcher, the `/consult` command and behaviour rules.
+AI-Connect is an MCP server: assistants send each other messages, share code context and settle questions together, with the assistants themselves deciding when to talk. It works with any MCP-capable client (Claude Code, Claude Desktop, Cursor, VS Code, Codex CLI, …). Day-to-day use and testing so far: Claude Code, for which [integrations/claude-code/](integrations/claude-code/) adds a message watcher, state hooks and behaviour rules.
 
 [Deutsche Version / German Version](README_DE.md)
 
@@ -125,7 +125,7 @@ git clone https://github.com/Peuqui/AI-Connect.git %USERPROFILE%\AI-Connect
 
 ### 3. Claude Code and other MCP clients
 
-**Claude Code:** the installer does it: it registers the MCP server (`claude mcp add`, with this installation's venv) and installs the AI-Connect plugin from the local directory, which brings the hooks that report busy / idle / waiting and the `/ai-connect:consult` command. Every session joins under its own name `Host:Project`. To repeat this step alone, e.g. after installing Claude Code later: `venv/bin/python installer.py claude`. Behaviour rules and the message watcher: [integrations/claude-code/README.md](integrations/claude-code/README.md).
+**Claude Code:** the installer does it: it registers the MCP server (`claude mcp add`, with this installation's venv) and installs the AI-Connect plugin from the local directory, which brings the hooks that report busy / idle / waiting. Every session joins under its own name `Host:Project`. To repeat this step alone, e.g. after installing Claude Code later: `venv/bin/python installer.py claude`. Behaviour rules and the message watcher: [integrations/claude-code/README.md](integrations/claude-code/README.md).
 
 **Other MCP clients** (VS Code, Cursor, Claude Desktop, …) connect to the HTTP/SSE server (install with `--http`). In VS Code, `~/.config/Code/User/mcp.json` (remote: `~/.vscode-server/data/User/mcp.json`):
 
@@ -156,8 +156,7 @@ To skip tool confirmation dialogs, add to `~/.claude/settings.json`:
       "mcp__ai-connect__peer_status",
       "mcp__ai-connect__peer_set_status",
       "mcp__ai-connect__peer_set_state",
-      "mcp__ai-connect__peer_notify_when_idle",
-      "mcp__ai-connect__peer_wait"
+      "mcp__ai-connect__peer_notify_when_idle"
     ]
   }
 }
@@ -174,7 +173,6 @@ Then restart the assistant so it loads the MCP server.
 | `peer_list` | Shows all online peers |
 | `peer_send` | Sends a message to a peer (or `*` for everyone) |
 | `peer_read` | Reads received messages |
-| `peer_wait` | Waits for a new message (with timeout); blocks the own turn, see [Waiting for messages](#waiting-for-messages) |
 | `peer_history` | Shows the conversation with a peer |
 | `peer_context` | Shares file context with other peers |
 | `peer_status` | Shows the connection to the Bridge Server |
@@ -207,12 +205,6 @@ Incoming messages do not wake a Claude Code session. The watcher does: it runs a
 ```
 
 The `peer_read` tool description carries this command with the real paths of the installation. The watcher asks the Bridge over the network to be told about messages for the peer, without registering as it: it works on every machine, cannot take over the name, and costs nothing while it waits. It takes the peer name from the session's own MCP client (not from the shell's directory, which may be a worktree).
-
-`peer_wait` blocks the own turn (no reaction to the user meanwhile), so use it only when there is nothing else to do, as in `/ai-connect:consult`.
-
-### Consulting another session
-
-`/ai-connect:consult` (Claude Code) puts a session into a long-poll loop: it shows every incoming message, answers as a critical second opinion, and leaves once both sides have sent `[LGTM]`. `[CONTINUE]` keeps a discussion open. Every message in both directions is shown to the user.
 
 ## Details
 

@@ -88,21 +88,6 @@ def create_app(peer_name: str) -> FastMCP:
         return await tools.peer_read()
 
     @mcp.tool()
-    async def peer_wait(timeout: int = 60) -> str:
-        """Long-poll: wait until messages arrive or the timeout passes.
-
-        Returns as soon as a message arrives, but blocks your own turn:
-        meanwhile you cannot react to the user. Normally the watcher (see
-        peer_read) is the way to wait; use peer_wait only when there is
-        nothing else to do (e.g. /ai-connect:consult). Do not call it in a loop from a
-        helper agent, which costs tokens every round.
-
-        Args:
-            timeout: Maximum wait in seconds (default 60)
-        """
-        return await tools.peer_wait(timeout)
-
-    @mcp.tool()
     async def peer_history(peer: str, limit: int = 20) -> str:
         """Show the conversation with a peer, as stored on the Bridge.
 

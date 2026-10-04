@@ -127,16 +127,6 @@ async def peer_read() -> str:
     return _format_messages(messages, client.peer_name)
 
 
-async def peer_wait(timeout: int) -> str:
-    client = get_client()
-    if not client or not client.connected:
-        return NOT_CONNECTED
-    messages = await client.wait_for_messages(timeout=float(timeout))
-    if not messages:
-        return "📭 Timeout - no new messages."
-    return _format_messages(messages, client.peer_name)
-
-
 async def peer_history(peer: str, limit: int) -> str:
     client = get_client()
     if not client or not client.connected:

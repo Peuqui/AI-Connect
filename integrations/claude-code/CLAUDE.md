@@ -18,13 +18,20 @@ Incoming peer messages do **not** wake a Claude Code session. The watcher does: 
 - The exact command for this installation is in the `peer_read` tool description.
 - It costs nothing while it waits: the Bridge pushes, nothing polls, no tokens.
 - It never registers as a peer, so it cannot take over your name. It takes the name from the session's own MCP client, regardless of the shell's directory (worktrees!), and prints it at start: check that it is your own.
-- Do **not** wait with `peer_wait` in a loop (it blocks your own turn) and do **not** start a helper agent with `peer_wait`. Use `peer_wait` only in `/consult`.
+- Never wait for an answer in a loop or with a helper agent: send, end your turn, and let the watcher wake you.
 - **Two sessions in the same project directory** share a peer name; the newer one takes over and the older one goes on standby until the newer one leaves, then takes the name back by itself. Both sessions get a message from `Bridge` about it. Close one of them (or set `AI_CONNECT_PEER_NAME`).
 
 ## Status line
 
 - When you start a larger task, set one line with `peer_set_status` (e.g. "Refactoring the Bridge token check"); clear it with `""` when the task is done. Other peers see it in `peer_list`.
 - To hear when another peer is done, use `peer_notify_when_idle` instead of asking it repeatedly; the Bridge's message wakes you through the watcher.
+
+## Being a useful second opinion
+
+When another peer asks for a review or an opinion:
+- Question the proposal and point out alternatives; do not just agree.
+- Ask for code context (`peer_context`) when it is missing — criticism without context is worthless.
+- Disagree openly when a solution is not good enough, and say why.
 
 ## Handshake protocol
 
@@ -49,7 +56,3 @@ Order does not matter.
 ### Tags
 - `[LGTM]` = agreement / handshake contribution
 - `[CONTINUE]` = not finished, keep the discussion open
-
-## Slash command
-
-`/ai-connect:consult` starts the long-poll loop (`peer_wait`) for an active consultation. See `plugin/commands/consult.md`.

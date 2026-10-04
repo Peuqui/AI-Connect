@@ -1,6 +1,6 @@
 # AI-Connect Claude Code integration
 
-Extras for Claude Code on top of the AI-Connect MCP server: a plugin with state hooks and the `/ai-connect:consult` command, behaviour rules and the message watcher.
+Extras for Claude Code on top of the AI-Connect MCP server: a plugin with state hooks, behaviour rules and the message watcher.
 
 ## Installation
 
@@ -9,13 +9,13 @@ Extras for Claude Code on top of the AI-Connect MCP server: a plugin with state 
 `install.sh` (Linux) and `install.cmd` (Windows) do this step through `installer.py claude`; to repeat it alone, e.g. after installing Claude Code later, run `<venv python> installer.py claude` in the AI-Connect directory. It
 
 - registers the **MCP server** (the STDIO client) with `claude mcp add -s user ai-connect`, using this installation's venv: every session joins as `Host:Project`, named after the project Claude Code runs in
-- adds the repository as a local plugin marketplace and installs the **plugin** `ai-connect@ai-connect` (the small directory `plugin/` here). It brings the **state hooks**, which call `peer_set_state` on prompt submit and after each tool (busy), on a permission prompt (waiting) and when a turn ends (idle), so other peers see the state in `peer_list` and `peer_notify_when_idle` can tell them when this session is done, and the **`/ai-connect:consult`** command
+- adds the repository as a local plugin marketplace and installs the **plugin** `ai-connect@ai-connect` (the small directory `plugin/` here). It brings the **state hooks**, which call `peer_set_state` on prompt submit and after each tool (busy), on a permission prompt (waiting) and when a turn ends (idle), so other peers see the state in `peer_list` and `peer_notify_when_idle` can tell them when this session is done
 
 The MCP server is registered by the installer rather than shipped in the plugin because its Python lives at a different path on Linux and Windows. Tested with Claude Code 2.1.289; older versions such as 2.1.50 reject the plugin manifest, so check `claude --version` first, and make sure no outdated second `claude` (e.g. an old npm install) comes first in `PATH`. `git pull` updates the plugin too (in new sessions or after `/reload-plugins`).
 
 Coming from an earlier setup:
 
-- Remove old command links in `~/.claude/commands/` (`consult.md`, or `beratung.md` from before the rename); the command is now `/ai-connect:consult`.
+- Remove old command links in `~/.claude/commands/` (`consult.md`, `beratung.md`); the consult command is gone, see the changelog.
 - Delete hooks you added by hand for `peer_set_state`; the plugin brings them.
 - Tool permissions are named `mcp__ai-connect__<tool>`.
 
@@ -40,11 +40,3 @@ Incoming messages do not wake a session; the watcher does. Following the rules, 
 ```
 
 It asks the Bridge to be told about messages for this peer, so it works on every machine and costs nothing while it waits.
-
-### Consulting
-
-`/ai-connect:consult` puts a session into a long-poll loop (`peer_wait`): it shows every incoming message, answers as a critical second opinion and leaves once both sides have sent `[LGTM]`. Use it in a session that has nothing else to do — while it waits it does not react to the user for up to 10 s at a time.
-
-Tags:
-- `[LGTM]` = agreement / handshake contribution
-- `[CONTINUE]` = not finished yet
