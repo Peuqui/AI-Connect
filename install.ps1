@@ -1,0 +1,185 @@
+# AI-Connect installation for Windows (Linux: install.sh)
+#
+# Usage (or double-click install.cmd for the interactive installation):
+#   install.cmd -Client          # Client: venv, config, Claude Code (no service, no admin)
+#   install.cmd -Server          # Server: Bridge task + firewall rule + everything the client gets
+#   install.cmd -Client -Http    # also the HTTP/SSE task for other MCP clients
+#   install.cmd -Update          # Update; detects what is installed
+#   install.cmd -Status          # Show status
+#   install.cmd -Uninstall       # Uninstall
+#
+# Config and the Claude Code registration are platform independent and live
+# in installer.py; this script does the Windows part: venv, scheduled tasks
+# (started at logon, restarted on failure) and the firewall rule.
+# ASCII only: Windows PowerShell 5.1 misreads UTF-8 files without a BOM.
+
+param(
+    [switch]$Server,
+    [switch]$Client,
+    [switch]$Http,
+    [switch]$Update,
+    [switch]$Status,
+    [switch]$Uninstall
+)
+
+$ErrorActionPreference = 'Stop'
+$Repo = $PSScriptRoot
+$Python = Join-Path $Repo 'venv\Scripts\python.exe'
+# pythonw.exe runs without a console window
+$PythonW = Join-Path $Repo 'venv\Scripts\pythonw.exe'
+$ConfigFile = Join-Path $HOME '.config\ai-connect\config.yaml'
+$BridgeTask = 'AI-Connect Bridge'
+$HttpTask = 'AI-Connect MCP HTTP'
+$FirewallRule = 'AI-Connect Bridge'
+$BridgePort = 9999
+
+function Invoke-Native {
+    # Windows PowerShell does not stop on a failing native command by itself
+    param([string]$Command, [string[]]$Arguments)
+    & $Command @Arguments
+    if ($LASTEXITCODE -ne 0) { throw "$Command $($Arguments -join ' ') failed (exit code $LASTEXITCODE)" }
+}
+
+function Test-Task([string]$Name) {
+    return [bool](Get-ScheduledTask -TaskName $Name -ErrorAction SilentlyContinue)
+}
+
+function Invoke-Elevated([string]$Command) {
+    # Firewall rules need administrator rights; Windows asks through UAC
+    Start-Process powershell -Verb RunAs -Wait -ArgumentList "-NoProfile -Command $Command"
+}
+
+function Show-Status {
+    Write-Host ''
+    Write-Host '=== AI-Connect status ===' -ForegroundColor Blue
+    foreach ($Task in @($BridgeTask, $HttpTask)) {
+        if (Test-Task $Task) {
+            Write-Host "  ${Task}: $((Get-ScheduledTask -TaskName $Task).State)"
+        }
+    }
+    if (Get-NetFirewallRule -DisplayName $FirewallRule -ErrorAction SilentlyContinue) {
+        Write-Host "  Firewall: port $BridgePort open (private networks)"
+    }
+    if (Test-Path $ConfigFile) {
+        Write-Host "  Config: $ConfigFile" -ForegroundColor Green
+    } else {
+        Write-Host '  Config: missing' -ForegroundColor Red
+    }
+    Write-Host ''
+}
+
+function Install-Task([string]$Name, [string]$Module) {
+    $Action = New-ScheduledTaskAction -Execute $PythonW -Argument "-m $Module" -WorkingDirectory $Repo
+    $Trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
+    $Settings = New-ScheduledTaskSettingsSet -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) `
+        -ExecutionTimeLimit ([TimeSpan]::Zero) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
+    Register-ScheduledTask -TaskName $Name -Action $Action -Trigger $Trigger -Settings $Settings -Force | Out-Null
+    Stop-ScheduledTask -TaskName $Name
+    Start-ScheduledTask -TaskName $Name
+    Write-Host "  $Name running" -ForegroundColor Green
+}
+
+function Uninstall-AIConnect {
+    $Confirm = Read-Host 'Really uninstall AI-Connect? [y/N]'
+    if ($Confirm -notmatch '^[yY]$') { Write-Host 'Aborted.'; exit 0 }
+
+    foreach ($Task in @($HttpTask, $BridgeTask)) {
+        if (Test-Task $Task) {
+            Stop-ScheduledTask -TaskName $Task
+            Unregister-ScheduledTask -TaskName $Task -Confirm:$false
+            Write-Host "  $Task removed" -ForegroundColor Green
+        }
+    }
+    if (Get-NetFirewallRule -DisplayName $FirewallRule -ErrorAction SilentlyContinue) {
+        Invoke-Elevated "Remove-NetFirewallRule -DisplayName '$FirewallRule'"
+        Write-Host '  Firewall rule removed' -ForegroundColor Green
+    }
+    if (Test-Path $Python) {
+        Invoke-Native $Python @((Join-Path $Repo 'installer.py'), 'unregister')
+    }
+    $DeleteConfig = Read-Host "Delete the config ($(Split-Path $ConfigFile)) too? [y/N]"
+    if ($DeleteConfig -match '^[yY]$') {
+        Remove-Item -Recurse -Force (Split-Path $ConfigFile)
+        Write-Host '  Config deleted' -ForegroundColor Green
+    }
+    Write-Host ''
+    Write-Host "The venv stays; remove it with: Remove-Item -Recurse $(Join-Path $Repo 'venv')"
+    exit 0
+}
+
+if ($Uninstall) { Uninstall-AIConnect }
+if ($Status) { Show-Status; exit 0 }
+
+$Mode = ''
+if ($Server) { $Mode = 'server' }
+if ($Client) { $Mode = 'client' }
+
+# An update keeps what is installed: the tasks tell server and HTTP, the
+# config tells a plain client
+if ($Update) {
+    if (Test-Task $BridgeTask) { $Mode = 'server' } else { $Mode = 'client' }
+    if (Test-Task $HttpTask) { $Http = $true }
+    if ($Mode -eq 'client' -and -not (Test-Path $ConfigFile)) {
+        Write-Host 'No installation found. Install first.' -ForegroundColor Red
+        exit 1
+    }
+}
+
+if (-not $Mode) {
+    Write-Host 'Which installation?'
+    Write-Host '  1) Client - joins a Bridge running elsewhere'
+    Write-Host '  2) Server - this machine runs the Bridge (includes the client)'
+    switch (Read-Host 'Choice [1/2]') {
+        '1' { $Mode = 'client' }
+        '2' { $Mode = 'server' }
+        default { Write-Host 'Invalid choice. Aborted.' -ForegroundColor Red; exit 1 }
+    }
+    if ((Read-Host 'Also the HTTP/SSE task for other MCP clients (VS Code, Cursor, ...)? [y/N]') -match '^[yY]$') {
+        $Http = $true
+    }
+}
+
+Write-Host ''
+Write-Host "=== AI-Connect $Mode installation ===" -ForegroundColor Blue
+
+Write-Host '[1/4] Python venv and dependencies...' -ForegroundColor Yellow
+if (-not (Get-Command py -ErrorAction SilentlyContinue)) {
+    Write-Host 'The Python launcher "py" was not found. Install Python 3.10 or newer from python.org.' -ForegroundColor Red
+    exit 1
+}
+Invoke-Native py @('-3', '-c', 'import sys; sys.exit(sys.version_info < (3, 10))')
+if (-not (Test-Path $Python)) {
+    Invoke-Native py @('-3', '-m', 'venv', (Join-Path $Repo 'venv'))
+}
+Invoke-Native $Python @('-m', 'pip', 'install', '-q', '--upgrade', 'pip')
+Invoke-Native $Python @('-m', 'pip', 'install', '-q', '--upgrade', '-r', (Join-Path $Repo 'requirements.txt'))
+Write-Host '  Dependencies up to date' -ForegroundColor Green
+
+Write-Host '[2/4] Configuration...' -ForegroundColor Yellow
+Invoke-Native $Python @((Join-Path $Repo 'installer.py'), 'config', "--$Mode")
+
+Write-Host '[3/4] Claude Code...' -ForegroundColor Yellow
+Invoke-Native $Python @((Join-Path $Repo 'installer.py'), 'claude')
+
+Write-Host '[4/4] Services...' -ForegroundColor Yellow
+if ($Mode -eq 'server') {
+    Install-Task $BridgeTask 'server.main'
+    if (-not (Get-NetFirewallRule -DisplayName $FirewallRule -ErrorAction SilentlyContinue)) {
+        Write-Host "  Opening port $BridgePort for private networks (Windows asks for administrator rights)..."
+        Invoke-Elevated ("New-NetFirewallRule -DisplayName '$FirewallRule' -Direction Inbound -Protocol TCP " +
+            "-LocalPort $BridgePort -Action Allow -Profile Private")
+    }
+}
+if ($Http) { Install-Task $HttpTask 'client.http_server' }
+if ($Mode -eq 'client' -and -not $Http) {
+    Write-Host '  None needed for a client (Claude Code starts its own MCP client per session)'
+}
+
+Show-Status
+Write-Host 'Behaviour rules for Claude Code: add this line to ~/.claude/CLAUDE.md'
+Write-Host "  @$((Join-Path $Repo 'integrations\claude-code\CLAUDE.md') -replace '\\', '/')"
+if ($Http) {
+    Write-Host ''
+    Write-Host 'Other MCP clients connect to http://127.0.0.1:9998/sse'
+}
+Write-Host ''
