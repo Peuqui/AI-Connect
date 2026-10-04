@@ -19,7 +19,7 @@ Incoming peer messages do **not** wake a Claude Code session. The watcher does: 
 - It costs nothing while it waits: the Bridge pushes, nothing polls, no tokens.
 - It never registers as a peer, so it cannot take over your name. It takes the name from the session's own MCP client, regardless of the shell's directory (worktrees!), and prints it at start: check that it is your own.
 - Do **not** wait with `peer_wait` in a loop (it blocks your own turn) and do **not** start a helper agent with `peer_wait`. Use `peer_wait` only in `/consult`.
-- **Two sessions in the same project directory** share a peer name; the newer one takes over and the older one is disconnected. Close one of them (or set `AI_CONNECT_PEER_NAME`).
+- **Two sessions in the same project directory** share a peer name; the newer one takes over and the older one goes on standby until the newer one leaves, then takes the name back by itself. Both sessions get a message from `Bridge` about it. Close one of them (or set `AI_CONNECT_PEER_NAME`).
 
 ## Handshake protocol
 

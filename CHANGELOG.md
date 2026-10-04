@@ -14,6 +14,7 @@
 - README (EN/DE) rewritten: setup via `install.sh`, Claude Code via the STDIO client, current architecture diagram, corrected heartbeat timings
 
 ### Fixed
+- A session replaced by a newer one with the same name stayed offline for good, even after the newer one had left (2026-10-04: a short second instance of the archimedes-lander session left the running one unreachable); it now waits on standby (`register` with `standby`, Bridge answers `standby` and later `name_free`) and takes the name back. Both sessions get a notice from `Bridge`
 - The watcher read the Bridge's database file and therefore worked on the Bridge machine only; it now asks the Bridge over the network (`watch`, no registration) and works on every machine, pushed instead of polling every 5 s
 - `peer_send` with a file and `peer_context` sent only the path and line numbers; the file content (or the given lines) now travels with the message
 - `peer_history` showed only the local, already emptied queue; it now asks the Bridge

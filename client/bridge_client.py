@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+from datetime import datetime, timezone
 
 import websockets
 from websockets import ClientConnection
@@ -12,6 +13,8 @@ logger = logging.getLogger(__name__)
 # How long a request to the Bridge (peer list, history) may take
 REQUEST_TIMEOUT_SECONDS = 5.0
 PING_INTERVAL_SECONDS = 25
+# Sender of the client's own notices in the message queue, like the Bridge's
+NOTICE_SENDER = "Bridge"
 
 
 class BridgeClient:
@@ -23,9 +26,13 @@ class BridgeClient:
         self.peer_name = peer_name
 
         self._ws: ClientConnection | None = None
+        # True only while registered under peer_name
         self._connected = False
         self._reconnecting = False
         self._should_reconnect = True
+        # Replaced by another session with the same name: wait until the
+        # name is free instead of taking it back
+        self._standby = False
         self._message_queue: list[dict] = []
         self._message_event: asyncio.Event | None = None
         # Answers to requests, keyed by the response type ("peer_list", "history")
@@ -48,8 +55,15 @@ class BridgeClient:
     def reconnecting(self) -> bool:
         return self._reconnecting
 
+    @property
+    def standby(self) -> bool:
+        return self._standby
+
     async def connect(self) -> bool:
-        """Connect to the Bridge and register under peer_name."""
+        """Connect to the Bridge and register under peer_name.
+
+        On standby the Bridge registers the client only once the name is free.
+        """
         uri = f"ws://{self.host}:{self.port}"
         try:
             self._ws = await websockets.connect(uri, ping_interval=60, ping_timeout=300)
@@ -58,9 +72,9 @@ class BridgeClient:
             self._connected = False
             return False
 
-        self._connected = True
+        self._connected = not self._standby
         self._reconnecting = False
-        await self._send({"type": "register", "name": self.peer_name})
+        await self._register()
 
         for task in (self._receive_task, self._ping_task):
             if task and not task.done():
@@ -68,7 +82,8 @@ class BridgeClient:
         self._receive_task = asyncio.create_task(self._receive_loop())
         self._ping_task = asyncio.create_task(self._ping_loop())
 
-        logger.info(f"Connected to Bridge at {uri} as '{self.peer_name}'")
+        state = "on standby for" if self._standby else "as"
+        logger.info(f"Connected to Bridge at {uri} {state} '{self.peer_name}'")
         return True
 
     async def disconnect(self) -> None:
@@ -139,6 +154,19 @@ class BridgeClient:
         finally:
             self._pending.pop(response_type, None)
 
+    async def _register(self) -> bool:
+        return await self._send({"type": "register", "name": self.peer_name, "standby": self._standby})
+
+    def _queue_notice(self, content: str) -> None:
+        """Put a notice of this client into the message queue, read by peer_read."""
+        self._message_queue.append({
+            "from": NOTICE_SENDER,
+            "to": self.peer_name,
+            "content": content,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        })
+        self._ensure_event().set()
+
     async def _send(self, data: dict) -> bool:
         """Send JSON over the WebSocket; a lost connection starts a reconnect."""
         if not self._ws:
@@ -166,7 +194,7 @@ class BridgeClient:
                 except json.JSONDecodeError:
                     logger.warning("Received invalid JSON from the Bridge")
                     continue
-                self._handle(data)
+                await self._handle(data)
         except websockets.exceptions.ConnectionClosed:
             pass
         # A clean close by the Bridge ends the loop without an exception, so
@@ -176,7 +204,7 @@ class BridgeClient:
         self._ws = None
         self.start_reconnect()
 
-    def _handle(self, data: dict) -> None:
+    async def _handle(self, data: dict) -> None:
         """Dispatch one message from the Bridge."""
         msg_type = data.get("type")
 
@@ -201,18 +229,36 @@ class BridgeClient:
         elif msg_type == "peer_left":
             logger.info(f"Peer left: {data.get('peer')}")
 
+        elif msg_type == "registered":
+            if self._standby:
+                self._standby = False
+                self._connected = True
+                logger.info(f"Peer name '{self.peer_name}' free again, registered")
+                self._queue_notice(f"The other session has left; this session is online again as {self.peer_name}.")
+
         elif msg_type == "replaced":
-            # Another session took over our name; reconnecting would only
-            # push it out again.
-            logger.warning(f"Peer name '{self.peer_name}' taken over by another session, not reconnecting")
-            self._should_reconnect = False
+            # Taking the name back would push the other session out; the
+            # Bridge closes this connection, and the reconnect waits on standby.
+            logger.warning(f"Peer name '{self.peer_name}' taken over by another session, on standby")
+            self._standby = True
+            self._queue_notice(
+                f"Another session took over the name {self.peer_name}. This session is on standby "
+                "and cannot send or receive until the other one leaves. Two sessions in the same "
+                "project directory share a name: close one, or set AI_CONNECT_PEER_NAME."
+            )
+
+        elif msg_type == "standby":
+            logger.info(f"Peer name '{self.peer_name}' still taken, waiting on standby")
+
+        elif msg_type == "name_free":
+            await self._register()
 
         elif msg_type == "error":
             logger.error(f"Bridge reported an error: {data.get('error')}")
 
     async def _ping_loop(self) -> None:
         """Tell the Bridge regularly that this peer is alive."""
-        while self._connected:
+        while self._ws is not None:
             await asyncio.sleep(PING_INTERVAL_SECONDS)
             if self._connected:
                 await self._send({"type": "ping"})
