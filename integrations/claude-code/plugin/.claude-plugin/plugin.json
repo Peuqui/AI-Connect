@@ -1,6 +1,6 @@
 {
   "name": "ai-connect",
-  "description": "State hooks and the /consult command for AI-Connect; the installer registers the MCP server itself",
+  "description": "State hooks for AI-Connect (busy / idle / waiting); the installer registers the MCP server itself",
   "author": {
     "name": "Peuqui",
     "url": "https://github.com/Peuqui"

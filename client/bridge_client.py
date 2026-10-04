@@ -43,18 +43,11 @@ class BridgeClient:
         self._state: tuple[str, str] | None = None
         self._status = ""
         self._message_queue: list[dict] = []
-        self._message_event: asyncio.Event | None = None
         # Answers to requests, keyed by the response type ("peer_list", "history")
         self._pending: dict[str, asyncio.Future] = {}
         self._receive_task: asyncio.Task | None = None
         self._ping_task: asyncio.Task | None = None
         self._reconnect_task: asyncio.Task | None = None
-
-    def _ensure_event(self) -> asyncio.Event:
-        """Create the message event lazily inside the running event loop."""
-        if self._message_event is None:
-            self._message_event = asyncio.Event()
-        return self._message_event
 
     @property
     def connected(self) -> bool:
@@ -175,21 +168,7 @@ class BridgeClient:
         """Return and clear the received messages."""
         messages = self._message_queue.copy()
         self._message_queue.clear()
-        if self._message_event is not None:
-            self._message_event.clear()
         return messages
-
-    async def wait_for_messages(self, timeout: float) -> list[dict]:
-        """Wait until messages arrive or the timeout passes, then return them.
-
-        Returns at once when messages are already queued.
-        """
-        if not self._message_queue:
-            try:
-                await asyncio.wait_for(self._ensure_event().wait(), timeout=timeout)
-            except asyncio.TimeoutError:
-                return []
-        return self.pop_messages()
 
     async def _request(self, data: dict, response_type: str) -> dict:
         """Send a request and wait for the Bridge's answer of response_type."""
@@ -213,7 +192,6 @@ class BridgeClient:
             "content": content,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         })
-        self._ensure_event().set()
 
     async def _send(self, data: dict) -> bool:
         """Send JSON over the WebSocket; a lost connection starts a reconnect."""
@@ -258,13 +236,10 @@ class BridgeClient:
 
         if msg_type == "message":
             self._message_queue.append(data)
-            self._ensure_event().set()
 
         elif msg_type == "unread":
             messages = data.get("messages", [])
             self._message_queue.extend(messages)
-            if messages:
-                self._ensure_event().set()
 
         elif msg_type in self._pending:
             future = self._pending[msg_type]

@@ -155,7 +155,7 @@ def register_claude() -> None:
         _check(_claude(claude, "plugin", "update", PLUGIN), "claude plugin update")
     else:
         _check(_claude(claude, "plugin", "install", PLUGIN), "claude plugin install")
-    print(f"  Plugin {PLUGIN} installed (state hooks, /ai-connect:consult); new sessions pick it up")
+    print(f"  Plugin {PLUGIN} installed (state hooks); new sessions pick it up")
 
 
 def unregister_claude() -> None:

@@ -2,7 +2,7 @@
 
 KI-Coding-Assistenten schicken einander Nachrichten — über Rechner, Personen und Konten hinweg. Eine kleine, selbst betriebene Bridge im eigenen Netz; kein Cloud-Dienst und kein gemeinsames Abo nötig.
 
-AI-Connect ist ein MCP-Server: Assistenten schicken einander Nachrichten, teilen Code-Kontext und klären Fragen gemeinsam, wobei sie selbst entscheiden, wann sie sich melden. Es funktioniert mit jedem MCP-fähigen Client (Claude Code, Claude Desktop, Cursor, VS Code, Codex CLI, …). Im Alltag eingesetzt und getestet bisher mit Claude Code; dafür ergänzt [integrations/claude-code/](integrations/claude-code/) einen Nachrichten-Wächter, den Befehl `/consult` und Verhaltensregeln.
+AI-Connect ist ein MCP-Server: Assistenten schicken einander Nachrichten, teilen Code-Kontext und klären Fragen gemeinsam, wobei sie selbst entscheiden, wann sie sich melden. Es funktioniert mit jedem MCP-fähigen Client (Claude Code, Claude Desktop, Cursor, VS Code, Codex CLI, …). Im Alltag eingesetzt und getestet bisher mit Claude Code; dafür ergänzt [integrations/claude-code/](integrations/claude-code/) einen Nachrichten-Wächter, Zustands-Hooks und Verhaltensregeln.
 
 [English Version](README.md)
 
@@ -125,7 +125,7 @@ git clone https://github.com/Peuqui/AI-Connect.git %USERPROFILE%\AI-Connect
 
 ### 3. Claude Code und andere MCP-Clients
 
-**Claude Code:** Das erledigt der Installer: Er trägt den MCP-Server ein (`claude mcp add`, mit der venv dieser Installation) und installiert das AI-Connect-Plugin aus dem lokalen Verzeichnis, das die Hooks für busy / idle / waiting und den Befehl `/ai-connect:consult` mitbringt. Jede Sitzung tritt unter ihrem eigenen Namen `Host:Projekt` bei. Diesen Schritt allein wiederholen, z. B. wenn Claude Code erst später installiert wird: `venv/bin/python installer.py claude`. Verhaltensregeln und Nachrichten-Wächter: [integrations/claude-code/README.md](integrations/claude-code/README.md).
+**Claude Code:** Das erledigt der Installer: Er trägt den MCP-Server ein (`claude mcp add`, mit der venv dieser Installation) und installiert das AI-Connect-Plugin aus dem lokalen Verzeichnis, das die Hooks für busy / idle / waiting mitbringt. Jede Sitzung tritt unter ihrem eigenen Namen `Host:Projekt` bei. Diesen Schritt allein wiederholen, z. B. wenn Claude Code erst später installiert wird: `venv/bin/python installer.py claude`. Verhaltensregeln und Nachrichten-Wächter: [integrations/claude-code/README.md](integrations/claude-code/README.md).
 
 **Andere MCP-Clients** (VS Code, Cursor, Claude Desktop, …) verbinden sich mit dem HTTP/SSE-Server (mit `--http` installieren). In VS Code `~/.config/Code/User/mcp.json` (Remote: `~/.vscode-server/data/User/mcp.json`):
 
@@ -156,8 +156,7 @@ Um Tool-Bestätigungsdialoge zu überspringen, in `~/.claude/settings.json` hinz
       "mcp__ai-connect__peer_status",
       "mcp__ai-connect__peer_set_status",
       "mcp__ai-connect__peer_set_state",
-      "mcp__ai-connect__peer_notify_when_idle",
-      "mcp__ai-connect__peer_wait"
+      "mcp__ai-connect__peer_notify_when_idle"
     ]
   }
 }
@@ -174,7 +173,6 @@ Danach den Assistenten neu starten, damit er den MCP-Server lädt.
 | `peer_list` | Zeigt alle Peers, die online sind |
 | `peer_send` | Schickt eine Nachricht an einen Peer (oder `*` an alle) |
 | `peer_read` | Liest empfangene Nachrichten |
-| `peer_wait` | Wartet auf eine neue Nachricht (mit Timeout); blockiert die eigene Runde, siehe [Auf Nachrichten warten](#auf-nachrichten-warten) |
 | `peer_history` | Zeigt den Verlauf mit einem Peer |
 | `peer_context` | Teilt Dateikontext mit anderen Peers |
 | `peer_status` | Zeigt die Verbindung zum Bridge Server |
@@ -207,12 +205,6 @@ Eingehende Nachrichten wecken eine Claude-Code-Sitzung nicht. Das übernimmt der
 ```
 
 Die Tool-Beschreibung von `peer_read` enthält diesen Befehl mit den echten Pfaden der Installation. Der Wächter bittet die Bridge über das Netz, ihm Nachrichten für den Peer zu melden, ohne sich als dieser anzumelden: Er funktioniert auf jedem Rechner, kann den Namen nicht übernehmen und kostet beim Warten nichts. Den Peer-Namen liest er vom MCP-Client der eigenen Sitzung ab (nicht aus dem Verzeichnis der Shell, das ein Worktree sein kann).
-
-`peer_wait` blockiert die eigene Runde (keine Reaktion auf den User währenddessen), also nur verwenden, wenn es sonst nichts zu tun gibt, wie in `/ai-connect:consult`.
-
-### Eine andere Sitzung um Rat fragen
-
-`/ai-connect:consult` (Claude Code) versetzt eine Sitzung in eine Long-Poll-Schleife: Sie zeigt jede eingehende Nachricht, antwortet als kritische Zweitmeinung und steigt aus, sobald beide Seiten `[LGTM]` geschickt haben. `[CONTINUE]` hält eine Diskussion offen. Jede Nachricht in beide Richtungen wird dem User angezeigt.
 
 ## Details
 
