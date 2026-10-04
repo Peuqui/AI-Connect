@@ -105,13 +105,14 @@ Es fragt nach IP oder Hostname des Bridge-Rechners und nach dem Bridge-Token und
 
 ### 3. MCP-Server im KI-Assistenten eintragen
 
-**Claude Code (empfohlen):** den STDIO-Client eintragen, damit jede Sitzung unter ihrem eigenen Namen `Host:Projekt` beitritt:
+**Claude Code (empfohlen):** das AI-Connect-Plugin aus dem AI-Connect-Verzeichnis installieren. Es bringt den STDIO-Client mit, damit jede Sitzung unter ihrem eigenen Namen `Host:Projekt` beitritt, die Hooks, die busy / idle / waiting melden, und den Befehl `/ai-connect:consult`:
 
 ```bash
-claude mcp add -s user ai-connect -- "$PWD/venv/bin/python" "$PWD/client/server.py"
+claude plugin marketplace add "$PWD"
+claude plugin install ai-connect@ai-connect
 ```
 
-Im AI-Connect-Verzeichnis ausführen. Nachrichten-Wächter, Befehl `/consult` und Verhaltensregeln: siehe [integrations/claude-code/README.md](integrations/claude-code/README.md).
+Den Marketplace aus dem lokalen Verzeichnis eintragen, nicht von GitHub, damit das Plugin mit der venv und Config dieser Installation läuft. Verhaltensregeln und Nachrichten-Wächter: [integrations/claude-code/README.md](integrations/claude-code/README.md).
 
 **Andere MCP-Clients** (VS Code, Cursor, Claude Desktop, …) verbinden sich mit dem HTTP/SSE-Server. In VS Code `~/.config/Code/User/mcp.json` (Remote: `~/.vscode-server/data/User/mcp.json`):
 
@@ -134,16 +135,16 @@ Um Tool-Bestätigungsdialoge zu überspringen, in `~/.claude/settings.json` hinz
 {
   "permissions": {
     "allow": [
-      "mcp__ai-connect__peer_list",
-      "mcp__ai-connect__peer_send",
-      "mcp__ai-connect__peer_read",
-      "mcp__ai-connect__peer_history",
-      "mcp__ai-connect__peer_context",
-      "mcp__ai-connect__peer_status",
-      "mcp__ai-connect__peer_set_status",
-      "mcp__ai-connect__peer_set_state",
-      "mcp__ai-connect__peer_notify_when_idle",
-      "mcp__ai-connect__peer_wait"
+      "mcp__plugin_ai-connect_ai-connect__peer_list",
+      "mcp__plugin_ai-connect_ai-connect__peer_send",
+      "mcp__plugin_ai-connect_ai-connect__peer_read",
+      "mcp__plugin_ai-connect_ai-connect__peer_history",
+      "mcp__plugin_ai-connect_ai-connect__peer_context",
+      "mcp__plugin_ai-connect_ai-connect__peer_status",
+      "mcp__plugin_ai-connect_ai-connect__peer_set_status",
+      "mcp__plugin_ai-connect_ai-connect__peer_set_state",
+      "mcp__plugin_ai-connect_ai-connect__peer_notify_when_idle",
+      "mcp__plugin_ai-connect_ai-connect__peer_wait"
     ]
   }
 }
@@ -166,7 +167,7 @@ Danach den Assistenten neu starten, damit er den MCP-Server lädt.
 | `peer_status` | Zeigt die Verbindung zum Bridge Server |
 | `peer_set_status` | Setzt eine Zeile, woran die Sitzung gerade arbeitet; `peer_list` zeigt sie an |
 | `peer_notify_when_idle` | Eine Nachricht von der Bridge, sobald ein Peer fertig ist oder auf eine Freigabe wartet |
-| `peer_set_state` | Meldet busy / idle / waiting; wird von Hooks aufgerufen, siehe [Claude-Code-Integration](integrations/claude-code/README.md#4-report-the-sessions-state-hooks) |
+| `peer_set_state` | Meldet busy / idle / waiting; wird von Hooks aufgerufen, siehe [Claude-Code-Integration](integrations/claude-code/README.md#1-install-the-plugin) |
 
 ### Beispiele
 
@@ -194,11 +195,11 @@ Eingehende Nachrichten wecken eine Claude-Code-Sitzung nicht. Das übernimmt der
 
 Die Tool-Beschreibung von `peer_read` enthält diesen Befehl mit den echten Pfaden der Installation. Der Wächter bittet die Bridge über das Netz, ihm Nachrichten für den Peer zu melden, ohne sich als dieser anzumelden: Er funktioniert auf jedem Rechner, kann den Namen nicht übernehmen und kostet beim Warten nichts. Den Peer-Namen liest er vom MCP-Client der eigenen Sitzung ab (nicht aus dem Verzeichnis der Shell, das ein Worktree sein kann).
 
-`peer_wait` blockiert die eigene Runde (keine Reaktion auf den User währenddessen), also nur verwenden, wenn es sonst nichts zu tun gibt, wie in `/consult`.
+`peer_wait` blockiert die eigene Runde (keine Reaktion auf den User währenddessen), also nur verwenden, wenn es sonst nichts zu tun gibt, wie in `/ai-connect:consult`.
 
 ### Eine andere Sitzung um Rat fragen
 
-`/consult` (Claude Code) versetzt eine Sitzung in eine Long-Poll-Schleife: Sie zeigt jede eingehende Nachricht, antwortet als kritische Zweitmeinung und steigt aus, sobald beide Seiten `[LGTM]` geschickt haben. `[CONTINUE]` hält eine Diskussion offen. Jede Nachricht in beide Richtungen wird dem User angezeigt.
+`/ai-connect:consult` (Claude Code) versetzt eine Sitzung in eine Long-Poll-Schleife: Sie zeigt jede eingehende Nachricht, antwortet als kritische Zweitmeinung und steigt aus, sobald beide Seiten `[LGTM]` geschickt haben. `[CONTINUE]` hält eine Diskussion offen. Jede Nachricht in beide Richtungen wird dem User angezeigt.
 
 ## Details
 
@@ -244,7 +245,7 @@ claude mcp list                       # Ist ai-connect eingetragen und verbunden
 - **Claude Codes eigener Posteingang noch ungenutzt**: Claude Code gibt inzwischen jeder Sitzung einen Inbox-Socket, und eine Nachricht von den eigenen Kindprozessen der Sitzung weckt sie direkt ([Doku](https://code.claude.com/docs/en/cross-session-messaging#the-sessions-inbox-socket)). Der Wächter könnte darüber zustellen, statt sich zu beenden; das ist noch nicht umgesetzt.
 - **Ein gemeinsamer Token, keine Verschlüsselung**: siehe den [Sicherheitshinweis](#1-bridge-server-ein-rechner-zb-heimserver-oder-raspberry-pi).
 - **Kontext nur auf Zuruf**: Assistenten teilen Code nur, wenn sie `peer_context` aufrufen; woran die anderen arbeiten, weiß man nur, soweit sie eine Statuszeile setzen (`peer_set_status`).
-- **Zustand braucht Hooks**: busy / idle / waiting und damit `peer_notify_when_idle` funktionieren nur bei Peers, deren Harness den Zustand meldet; für Claude Code siehe die [Hooks](integrations/claude-code/README.md#4-report-the-sessions-state-hooks).
+- **Zustand braucht Hooks**: busy / idle / waiting und damit `peer_notify_when_idle` funktionieren nur bei Peers, deren Harness den Zustand meldet; für Claude Code siehe die [Hooks](integrations/claude-code/README.md#1-install-the-plugin).
 - **Linux mit systemd** für die Dienste; auf anderen Plattformen müssen die Dienste von Hand eingerichtet werden.
 
 Pull Requests sind willkommen, falls jemand einen besseren Ansatz findet.

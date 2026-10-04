@@ -90,7 +90,7 @@ def create_app(peer_name: str) -> FastMCP:
         Returns as soon as a message arrives, but blocks your own turn:
         meanwhile you cannot react to the user. Normally the watcher (see
         peer_read) is the way to wait; use peer_wait only when there is
-        nothing else to do (e.g. /consult). Do not call it in a loop from a
+        nothing else to do (e.g. /ai-connect:consult). Do not call it in a loop from a
         helper agent, which costs tokens every round.
 
         Args:

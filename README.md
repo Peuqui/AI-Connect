@@ -105,13 +105,14 @@ It asks for the Bridge machine's IP or hostname and the Bridge token, and instal
 
 ### 3. Register the MCP server in your AI assistant
 
-**Claude Code (recommended):** register the STDIO client, so each session joins under its own name `Host:Project`:
+**Claude Code (recommended):** install the AI-Connect plugin from the AI-Connect directory. It brings the STDIO client, so each session joins under its own name `Host:Project`, the hooks that report busy / idle / waiting, and the `/ai-connect:consult` command:
 
 ```bash
-claude mcp add -s user ai-connect -- "$PWD/venv/bin/python" "$PWD/client/server.py"
+claude plugin marketplace add "$PWD"
+claude plugin install ai-connect@ai-connect
 ```
 
-Run it in the AI-Connect directory. For the message watcher, the `/consult` command and the behaviour rules, see [integrations/claude-code/README.md](integrations/claude-code/README.md).
+Add the marketplace from the local directory, not from GitHub, so the plugin runs with this installation's venv and config. Behaviour rules and the message watcher: [integrations/claude-code/README.md](integrations/claude-code/README.md).
 
 **Other MCP clients** (VS Code, Cursor, Claude Desktop, …) connect to the HTTP/SSE server. In VS Code, `~/.config/Code/User/mcp.json` (remote: `~/.vscode-server/data/User/mcp.json`):
 
@@ -134,16 +135,16 @@ To skip tool confirmation dialogs, add to `~/.claude/settings.json`:
 {
   "permissions": {
     "allow": [
-      "mcp__ai-connect__peer_list",
-      "mcp__ai-connect__peer_send",
-      "mcp__ai-connect__peer_read",
-      "mcp__ai-connect__peer_history",
-      "mcp__ai-connect__peer_context",
-      "mcp__ai-connect__peer_status",
-      "mcp__ai-connect__peer_set_status",
-      "mcp__ai-connect__peer_set_state",
-      "mcp__ai-connect__peer_notify_when_idle",
-      "mcp__ai-connect__peer_wait"
+      "mcp__plugin_ai-connect_ai-connect__peer_list",
+      "mcp__plugin_ai-connect_ai-connect__peer_send",
+      "mcp__plugin_ai-connect_ai-connect__peer_read",
+      "mcp__plugin_ai-connect_ai-connect__peer_history",
+      "mcp__plugin_ai-connect_ai-connect__peer_context",
+      "mcp__plugin_ai-connect_ai-connect__peer_status",
+      "mcp__plugin_ai-connect_ai-connect__peer_set_status",
+      "mcp__plugin_ai-connect_ai-connect__peer_set_state",
+      "mcp__plugin_ai-connect_ai-connect__peer_notify_when_idle",
+      "mcp__plugin_ai-connect_ai-connect__peer_wait"
     ]
   }
 }
@@ -166,7 +167,7 @@ Then restart the assistant so it loads the MCP server.
 | `peer_status` | Shows the connection to the Bridge Server |
 | `peer_set_status` | Sets one line on what the session is working on; `peer_list` shows it |
 | `peer_notify_when_idle` | One message from the Bridge as soon as a peer is done or waits for an approval |
-| `peer_set_state` | Reports busy / idle / waiting; called by hooks, see the [Claude Code integration](integrations/claude-code/README.md#4-report-the-sessions-state-hooks) |
+| `peer_set_state` | Reports busy / idle / waiting; called by hooks, see the [Claude Code integration](integrations/claude-code/README.md#1-install-the-plugin) |
 
 ### Examples
 
@@ -194,11 +195,11 @@ Incoming messages do not wake a Claude Code session. The watcher does: it runs a
 
 The `peer_read` tool description carries this command with the real paths of the installation. The watcher asks the Bridge over the network to be told about messages for the peer, without registering as it: it works on every machine, cannot take over the name, and costs nothing while it waits. It takes the peer name from the session's own MCP client (not from the shell's directory, which may be a worktree).
 
-`peer_wait` blocks the own turn (no reaction to the user meanwhile), so use it only when there is nothing else to do, as in `/consult`.
+`peer_wait` blocks the own turn (no reaction to the user meanwhile), so use it only when there is nothing else to do, as in `/ai-connect:consult`.
 
 ### Consulting another session
 
-`/consult` (Claude Code) puts a session into a long-poll loop: it shows every incoming message, answers as a critical second opinion, and leaves once both sides have sent `[LGTM]`. `[CONTINUE]` keeps a discussion open. Every message in both directions is shown to the user.
+`/ai-connect:consult` (Claude Code) puts a session into a long-poll loop: it shows every incoming message, answers as a critical second opinion, and leaves once both sides have sent `[LGTM]`. `[CONTINUE]` keeps a discussion open. Every message in both directions is shown to the user.
 
 ## Details
 
@@ -244,7 +245,7 @@ claude mcp list                       # is ai-connect registered and connected?
 - **Claude Code's own inbox not used yet**: Claude Code now gives every session an inbox socket, and a message from the session's own child processes wakes it directly ([docs](https://code.claude.com/docs/en/cross-session-messaging#the-sessions-inbox-socket)). The watcher could deliver through it instead of ending; that is not implemented yet.
 - **One shared token, no encryption**: see the [security note](#1-bridge-server-one-machine-eg-a-home-server-or-raspberry-pi).
 - **Manual context**: assistants share code only when they call `peer_context`; what the others work on is known only as far as they set a status line (`peer_set_status`).
-- **State needs hooks**: busy / idle / waiting, and with it `peer_notify_when_idle`, works only for peers whose harness reports it; for Claude Code see the [hooks](integrations/claude-code/README.md#4-report-the-sessions-state-hooks).
+- **State needs hooks**: busy / idle / waiting, and with it `peer_notify_when_idle`, works only for peers whose harness reports it; for Claude Code see the [hooks](integrations/claude-code/README.md#1-install-the-plugin).
 - **Linux with systemd** for the services; other platforms need the services set up by hand.
 
 Pull requests are welcome if you find a better approach.

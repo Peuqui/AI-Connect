@@ -497,8 +497,9 @@ if [[ "$SERVER_MODE" == "server" ]]; then
 fi
 echo "  journalctl -u ai-connect-mcp.service -f"
 echo ""
-echo "Claude Code (one peer per session, named Host:Project):"
-echo "  claude mcp add -s user ai-connect -- \"$SCRIPT_DIR/venv/bin/python\" \"$SCRIPT_DIR/client/server.py\""
+echo "Claude Code (plugin: one peer per session, named Host:Project, plus state hooks and /ai-connect:consult):"
+echo "  claude plugin marketplace add \"$SCRIPT_DIR\""
+echo "  claude plugin install ai-connect@ai-connect"
 echo ""
 echo "Other MCP clients, e.g. VS Code (~/.config/Code/User/mcp.json, remote: ~/.vscode-server/data/User/mcp.json):"
 echo '{'

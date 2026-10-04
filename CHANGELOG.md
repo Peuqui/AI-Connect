@@ -3,6 +3,8 @@
 ## [Unreleased] - 2026-10-01
 
 ### Added
+- Claude Code plugin: the repository is a plugin marketplace (`.claude-plugin/`); `claude plugin marketplace add <repo>` and `claude plugin install ai-connect@ai-connect` bring the MCP server, the state hooks (`integrations/claude-code/hooks.json`) and `/ai-connect:consult` (was `/consult` via symlink). Replaces `claude mcp add` and hand-written hooks; tool permissions are now named `mcp__plugin_ai-connect_ai-connect__*`
+- `peer_name.py`: one naming rule for the STDIO client and the watcher. The project comes from `CLAUDE_PROJECT_DIR` when Claude Code sets it, because a plugin's MCP server runs in the plugin directory
 - Peer state and status line: `peer_set_status` (one line on the current work) and `peer_set_state` (busy / idle / waiting, reported by hooks; for Claude Code `mcp_tool` hooks on UserPromptSubmit, PostToolUse, Notification and Stop); `peer_list` shows both. `peer_notify_when_idle` asks the Bridge for one message as soon as a peer is done or waits for an approval, across machines. The client resends state and status after every reconnect
 - Bridge token: the Bridge refuses every connection whose handshake lacks `Authorization: Bearer <bridge.token>` (clients, HTTP/SSE server and watcher send it). `install.sh` generates the token on the Bridge machine and asks for it on clients. New required key `bridge.token`; a refused client stops reconnecting and `peer_status` says why
 - The Bridge deletes messages older than `bridge.history_days` from the history, at start and then daily. New required config keys `bridge.history_days` and `logging.*`: add them to existing configs (see `config.yaml.example`)
