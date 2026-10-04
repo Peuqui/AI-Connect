@@ -71,7 +71,8 @@ def session_peer_name() -> str | None:
 async def watch(peer: str) -> None:
     bridge = load_config()["bridge"]
     uri = f"ws://{bridge['host']}:{bridge['port']}"
-    async with websockets.connect(uri) as ws:
+    headers = {"Authorization": f"Bearer {bridge['token']}"}
+    async with websockets.connect(uri, additional_headers=headers) as ws:
         await ws.send(json.dumps({"type": "watch", "peer": peer}))
         async for raw in ws:
             data = json.loads(raw)
@@ -106,6 +107,8 @@ def main() -> None:
         sys.exit(2)
     except OSError as e:
         sys.exit(f"aiconnect_watch.py: cannot reach the Bridge: {e}")
+    except websockets.exceptions.InvalidStatus as e:
+        sys.exit(f"aiconnect_watch.py: Bridge refused the connection ({e}) - check bridge.token in config.yaml")
 
 
 if __name__ == "__main__":
