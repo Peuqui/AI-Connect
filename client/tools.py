@@ -65,8 +65,42 @@ async def peer_list() -> str:
     peers = await client.list_peers()
     lines = ["Online peers:"]
     for peer in peers:
-        lines.append(f"  - {peer['name']} [{peer['ip']}]")
+        line = f"  - {peer['name']} [{peer['ip']}]"
+        if peer["state"]:
+            line += f" {peer['state']} since {_format_bridge_time(peer['state_since'])}"
+            if peer["state_detail"]:
+                line += f" ({peer['state_detail']})"
+        if peer["status"]:
+            line += f" - {peer['status']}"
+        lines.append(line)
     return "\n".join(lines)
+
+
+async def peer_set_state(state: str, detail: str) -> str:
+    client = get_client()
+    if not client or not client.connected:
+        return NOT_CONNECTED
+    if not await client.set_state(state, detail):
+        return "❌ Connection to the Bridge lost."
+    return f"State: {state}" + (f" ({detail})" if detail else "")
+
+
+async def peer_set_status(status: str) -> str:
+    client = get_client()
+    if not client or not client.connected:
+        return NOT_CONNECTED
+    if not await client.set_status(status):
+        return "❌ Connection to the Bridge lost."
+    return f"Status: {status}" if status else "Status cleared"
+
+
+async def peer_notify_when_idle(peer: str) -> str:
+    client = get_client()
+    if not client or not client.connected:
+        return NOT_CONNECTED
+    if not await client.notify_when_idle(peer):
+        return "❌ Connection to the Bridge lost."
+    return f"The Bridge will send you a message once {peer} is done or waits for approval."
 
 
 async def peer_send(to: str, message: str, file: str | None, lines: str | None) -> str:

@@ -11,7 +11,7 @@ from websockets.asyncio.server import Server, ServerConnection
 from websockets.http11 import Request, Response
 
 from .message_store import MessageStore
-from .peer_registry import Peer, PeerRegistry
+from .peer_registry import Peer, PeerRegistry, utc_now
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +20,9 @@ HISTORY_CLEANUP_SECONDS = 24 * 60 * 60
 # Sender of the Bridge's own notices; not of the form Host:Project, so no
 # peer can have it
 BRIDGE_SENDER = "Bridge"
+PEER_STATES = ("busy", "idle", "waiting")
+IDLE_NOTICE = "{name} is done and idle."
+WAITING_NOTICE = "{name} is waiting for approval: {detail}"
 TAKEOVER_NOTICE = (
     "Another session with the name {name} was online and has been put on standby; "
     "it takes the name back once this session leaves. Two sessions in the same "
@@ -46,6 +49,9 @@ class BridgeServer:
         # Standby connections per peer name: replaced sessions that wait for
         # the name to become free again
         self._standby: dict[str, set[ServerConnection]] = {}
+        # Who wants to hear when a peer is done: peer name -> subscriber
+        # names; each subscription fires once
+        self._idle_subscribers: dict[str, set[str]] = {}
 
         self.registry.on_join(self._announce_joined)
         self.registry.on_leave(self._handle_left)
@@ -141,7 +147,15 @@ class BridgeServer:
                     await websocket.send(json.dumps({
                         "type": "peer_list",
                         "peers": [
-                            {"name": p.name, "ip": p.ip, "connected_at": p.connected_at}
+                            {
+                                "name": p.name,
+                                "ip": p.ip,
+                                "connected_at": p.connected_at,
+                                "state": p.state,
+                                "state_detail": p.state_detail,
+                                "state_since": p.state_since,
+                                "status": p.status,
+                            }
                             for p in self.registry.all()
                         ]
                     }))
@@ -151,6 +165,25 @@ class BridgeServer:
 
                 elif msg_type == "message":
                     await self._route_message(message, peer_name)
+
+                elif msg_type == "set_state":
+                    state = message.get("state")
+                    if state not in PEER_STATES:
+                        await self._send_error(websocket, f"'set_state' needs a state out of {PEER_STATES}")
+                        continue
+                    await self._set_state(peer_name, state, message.get("detail", ""))
+
+                elif msg_type == "set_status":
+                    peer = self.registry.get(peer_name)
+                    if peer:
+                        peer.status = message.get("status", "")
+
+                elif msg_type == "notify_when_idle":
+                    watched = message.get("peer")
+                    if not watched:
+                        await self._send_error(websocket, "'notify_when_idle' needs a 'peer'")
+                        continue
+                    await self._subscribe_idle(peer_name, watched)
 
                 elif msg_type == "history":
                     history = await self.store.get_history(
@@ -177,6 +210,26 @@ class BridgeServer:
 
     async def _send_error(self, websocket: ServerConnection, error: str) -> None:
         await websocket.send(json.dumps({"type": "error", "error": error}))
+
+    async def _set_state(self, name: str, state: str, detail: str) -> None:
+        """Record a peer's state; done or waiting fires its subscriptions."""
+        peer = self.registry.get(name)
+        if peer is None:
+            return
+        peer.state, peer.state_detail, peer.state_since = state, detail, utc_now().isoformat()
+        if state == "busy":
+            return
+        notice = IDLE_NOTICE.format(name=name) if state == "idle" else WAITING_NOTICE.format(name=name, detail=detail)
+        for subscriber in self._idle_subscribers.pop(name, set()):
+            await self._route_message({"to": subscriber, "content": notice}, BRIDGE_SENDER)
+
+    async def _subscribe_idle(self, subscriber: str, watched: str) -> None:
+        """Notify subscriber once when watched is done; at once if it already is."""
+        peer = self.registry.get(watched)
+        if peer and peer.state == "idle":
+            await self._route_message({"to": subscriber, "content": IDLE_NOTICE.format(name=watched)}, BRIDGE_SENDER)
+            return
+        self._idle_subscribers.setdefault(watched, set()).add(subscriber)
 
     async def _route_message(self, message: dict, from_peer: str) -> None:
         """Deliver a message; direct messages to offline peers wait in the store.

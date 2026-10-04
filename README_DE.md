@@ -140,6 +140,9 @@ Um Tool-Bestätigungsdialoge zu überspringen, in `~/.claude/settings.json` hinz
       "mcp__ai-connect__peer_history",
       "mcp__ai-connect__peer_context",
       "mcp__ai-connect__peer_status",
+      "mcp__ai-connect__peer_set_status",
+      "mcp__ai-connect__peer_set_state",
+      "mcp__ai-connect__peer_notify_when_idle",
       "mcp__ai-connect__peer_wait"
     ]
   }
@@ -161,6 +164,9 @@ Danach den Assistenten neu starten, damit er den MCP-Server lädt.
 | `peer_history` | Zeigt den Verlauf mit einem Peer |
 | `peer_context` | Teilt Dateikontext mit anderen Peers |
 | `peer_status` | Zeigt die Verbindung zum Bridge Server |
+| `peer_set_status` | Setzt eine Zeile, woran die Sitzung gerade arbeitet; `peer_list` zeigt sie an |
+| `peer_notify_when_idle` | Eine Nachricht von der Bridge, sobald ein Peer fertig ist oder auf eine Freigabe wartet |
+| `peer_set_state` | Meldet busy / idle / waiting; wird von Hooks aufgerufen, siehe [Claude-Code-Integration](integrations/claude-code/README.md#4-report-the-sessions-state-hooks) |
 
 ### Beispiele
 
@@ -175,6 +181,8 @@ Man spricht ganz normal mit dem Assistenten; er ruft die Tools selbst auf:
 > „Hat mir jemand geschrieben?“
 >
 > „Frag alle, ob gerade jemand GPU 2 benutzt.“
+>
+> „Sag mir Bescheid, wenn Mini:vllm-research fertig ist.“
 
 ### Auf Nachrichten warten
 
@@ -235,7 +243,8 @@ claude mcp list                       # Ist ai-connect eingetragen und verbunden
 - **Wecken nur über den Wächter**: Eine AI-Connect-Nachricht weckt eine Claude-Code-Sitzung nicht von selbst. Der [Wächter](#auf-nachrichten-warten) umgeht das zwischen zwei Runden; eine bereits laufende Runde wird nicht unterbrochen, die Nachricht wird aufgegriffen, wenn sie endet.
 - **Claude Codes eigener Posteingang noch ungenutzt**: Claude Code gibt inzwischen jeder Sitzung einen Inbox-Socket, und eine Nachricht von den eigenen Kindprozessen der Sitzung weckt sie direkt ([Doku](https://code.claude.com/docs/en/cross-session-messaging#the-sessions-inbox-socket)). Der Wächter könnte darüber zustellen, statt sich zu beenden; das ist noch nicht umgesetzt.
 - **Ein gemeinsamer Token, keine Verschlüsselung**: siehe den [Sicherheitshinweis](#1-bridge-server-ein-rechner-zb-heimserver-oder-raspberry-pi).
-- **Kontext nur auf Zuruf**: Assistenten teilen Code nur, wenn sie `peer_context` aufrufen; niemand weiß automatisch, woran die anderen arbeiten.
+- **Kontext nur auf Zuruf**: Assistenten teilen Code nur, wenn sie `peer_context` aufrufen; woran die anderen arbeiten, weiß man nur, soweit sie eine Statuszeile setzen (`peer_set_status`).
+- **Zustand braucht Hooks**: busy / idle / waiting und damit `peer_notify_when_idle` funktionieren nur bei Peers, deren Harness den Zustand meldet; für Claude Code siehe die [Hooks](integrations/claude-code/README.md#4-report-the-sessions-state-hooks).
 - **Linux mit systemd** für die Dienste; auf anderen Plattformen müssen die Dienste von Hand eingerichtet werden.
 
 Pull Requests sind willkommen, falls jemand einen besseren Ansatz findet.

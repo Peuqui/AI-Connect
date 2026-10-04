@@ -24,6 +24,12 @@ class Peer:
     connected_at: str
     websocket: Any = None
     last_ping: datetime = field(default_factory=utc_now)
+    # Reported by the peer itself: state ("busy", "idle", "waiting") with
+    # an optional detail (e.g. what it waits for), and a free status line
+    state: str = ""
+    state_detail: str = ""
+    state_since: str = ""
+    status: str = ""
 
 
 class PeerRegistry:

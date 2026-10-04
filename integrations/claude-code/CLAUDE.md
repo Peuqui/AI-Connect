@@ -21,6 +21,11 @@ Incoming peer messages do **not** wake a Claude Code session. The watcher does: 
 - Do **not** wait with `peer_wait` in a loop (it blocks your own turn) and do **not** start a helper agent with `peer_wait`. Use `peer_wait` only in `/consult`.
 - **Two sessions in the same project directory** share a peer name; the newer one takes over and the older one goes on standby until the newer one leaves, then takes the name back by itself. Both sessions get a message from `Bridge` about it. Close one of them (or set `AI_CONNECT_PEER_NAME`).
 
+## Status line
+
+- When you start a larger task, set one line with `peer_set_status` (e.g. "Refactoring the Bridge token check"); clear it with `""` when the task is done. Other peers see it in `peer_list`.
+- To hear when another peer is done, use `peer_notify_when_idle` instead of asking it repeatedly; the Bridge's message wakes you through the watcher.
+
 ## Handshake protocol
 
 When a joint task with another peer is done:
