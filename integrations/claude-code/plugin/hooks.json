@@ -58,7 +58,8 @@
           {
             "type": "command",
             "command": "\"${CLAUDE_PLUGIN_ROOT}/watch.sh\"",
-            "asyncRewake": true
+            "asyncRewake": true,
+            "timeout": 604800
           }
         ]
       }
@@ -69,7 +70,8 @@
           {
             "type": "command",
             "command": "\"${CLAUDE_PLUGIN_ROOT}/watch.sh\"",
-            "asyncRewake": true
+            "asyncRewake": true,
+            "timeout": 604800
           }
         ]
       }
