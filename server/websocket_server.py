@@ -3,7 +3,6 @@
 import asyncio
 import json
 import logging
-from typing import Optional
 
 import websockets
 from websockets.asyncio.server import Server, ServerConnection
@@ -24,8 +23,8 @@ class BridgeServer:
         self.port = port
         self.registry = PeerRegistry()
         self.store = MessageStore()
-        self._server: Optional[Server] = None
-        self._heartbeat_task: Optional[asyncio.Task] = None
+        self._server: Server | None = None
+        self._heartbeat_task: asyncio.Task | None = None
         # Watchers per peer name: connections that want to hear about new
         # messages for that peer without registering as it
         self._watchers: dict[str, set[ServerConnection]] = {}
@@ -49,7 +48,7 @@ class BridgeServer:
 
     async def _handle_connection(self, websocket: ServerConnection) -> None:
         """Serve one peer connection until it closes."""
-        peer_name: Optional[str] = None
+        peer_name: str | None = None
         client_ip = websocket.remote_address[0] if websocket.remote_address else "unknown"
 
         try:

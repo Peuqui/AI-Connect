@@ -13,8 +13,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from config_loader import load_config  # noqa: E402
-from mcp_app import create_app  # noqa: E402
+from config_loader import load_config
+from mcp_app import create_app
 
 log_dir = Path.home() / ".config" / "ai-connect"
 log_dir.mkdir(parents=True, exist_ok=True)

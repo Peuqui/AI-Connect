@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Render the star history chart as a self-contained SVG.
 
 Reads the daily snapshots collected by .github/workflows/traffic.yml and

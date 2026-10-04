@@ -1,9 +1,13 @@
 """Registry of the peers connected to the Bridge."""
 
 import json
+from collections.abc import Awaitable, Callable
+from contextlib import suppress
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Awaitable, Callable, Optional
+from typing import Any
+
+from websockets.exceptions import ConnectionClosed
 
 PeerCallback = Callable[["Peer"], Awaitable[None]]
 
@@ -28,8 +32,8 @@ class PeerRegistry:
     def __init__(self, timeout_seconds: int = 300):
         self._peers: dict[str, Peer] = {}
         self._timeout = timeout_seconds
-        self._on_join: Optional[PeerCallback] = None
-        self._on_leave: Optional[PeerCallback] = None
+        self._on_join: PeerCallback | None = None
+        self._on_leave: PeerCallback | None = None
 
     def on_join(self, callback: PeerCallback) -> None:
         self._on_join = callback
@@ -46,12 +50,10 @@ class PeerRegistry:
         """
         existing = self._peers.pop(name, None)
         if existing and existing.websocket:
-            try:
+            # The old connection may already be dead; it is gone either way.
+            with suppress(ConnectionClosed):
                 await existing.websocket.send(json.dumps({"type": "replaced"}))
                 await existing.websocket.close()
-            except Exception:
-                # The old connection may already be dead; it is gone either way.
-                pass
 
         peer = Peer(
             name=name,
@@ -69,7 +71,7 @@ class PeerRegistry:
         if peer and self._on_leave:
             await self._on_leave(peer)
 
-    def get(self, name: str) -> Optional[Peer]:
+    def get(self, name: str) -> Peer | None:
         """Peer by its full name ("Host:Project")."""
         return self._peers.get(name)
 
