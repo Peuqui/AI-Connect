@@ -31,7 +31,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import websockets
 
 from config_loader import bridge_target, load_config
-from peer_name import record_seen, seen_since, session_name
+from peer_name import process_alive, record_seen, seen_since, session_name
 
 # Claude Code reads the output as UTF-8; on Windows Python writes a pipe in the
 # ANSI code page and fails on characters outside it (an arrow, an emoji)
@@ -42,6 +42,8 @@ sys.stderr.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union
 RECONNECT_SECONDS = 5
 # How long to wait at session start for the MCP client to record its name
 NAME_WAIT_SECONDS = 60
+# How often to check that the session still runs
+SESSION_CHECK_SECONDS = 30
 
 
 
@@ -93,11 +95,29 @@ async def watch(session: str) -> None:
         await asyncio.sleep(RECONNECT_SECONDS)
 
 
+async def end_with_session(session: str) -> None:
+    """Exit once the session is gone.
+
+    A watcher outlives its session when Claude Code ends without ending its
+    hooks (on Windows it does not end their process tree); it would then
+    wait, and reconnect, for nobody.
+    """
+    while process_alive(int(session)):
+        await asyncio.sleep(SESSION_CHECK_SECONDS)
+    os._exit(0)
+
+
+async def run(session: str) -> None:
+    guard = asyncio.create_task(end_with_session(session))
+    await watch(session)
+    guard.cancel()
+
+
 def main() -> None:
     session = os.environ.get("CLAUDE_PID")
     if session is None:
         sys.exit("aiconnect_watch.py: run by the AI-Connect plugin's hooks inside a Claude Code session (no CLAUDE_PID)")
-    asyncio.run(watch(session))
+    asyncio.run(run(session))
 
 
 if __name__ == "__main__":
