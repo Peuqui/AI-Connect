@@ -12,6 +12,7 @@
 - Code, log messages, tool descriptions and `install.sh` are in English; `install.sh` writes the PolicyKit rule for the installing user instead of a fixed one, asks clients for the Bridge address and suggests `0.0.0.0` as the Bridge's listen address (`127.0.0.1` locked out every other machine); it ends with the ready `claude mcp add` line
 - `/beratung` renamed to `/consult` and rewritten in English, as are the Claude Code rules and the integration README; tag `[WEITER]` is now `[CONTINUE]`
 - README (EN/DE) rewritten: setup via `install.sh`, Claude Code via the STDIO client, current architecture diagram, corrected heartbeat timings
+- README (EN/DE): AI-Connect works across people, accounts and subscriptions; comparison with Claude Code's built-in cross-session messaging; security note (no authentication or encryption: LAN or VPN only); the limitation "no way to signal a running session from outside" is outdated since Claude Code's per-session inbox socket
 
 ### Fixed
 - A session replaced by a newer one with the same name stayed offline for good, even after the newer one had left (2026-10-04: a short second instance of the archimedes-lander session left the running one unreachable); it now waits on standby (`register` with `standby`, Bridge answers `standby` and later `name_free`) and takes the name back. Both sessions get a notice from `Bridge`

@@ -1,8 +1,8 @@
 # AI-Connect
 
-Ein MCP-Server, über den KI-Coding-Assistenten auf verschiedenen Rechnern einander Nachrichten schicken, Code-Kontext teilen und Fragen gemeinsam klären — wobei die Assistenten selbst entscheiden, wann sie sich melden.
+KI-Coding-Assistenten schicken einander Nachrichten — über Rechner, Personen und Konten hinweg. Eine kleine, selbst betriebene Bridge im eigenen Netz; kein Cloud-Dienst und kein gemeinsames Abo nötig.
 
-Funktioniert mit jedem MCP-fähigen Client (Claude Code, Claude Desktop, Cursor, VS Code, Codex CLI, …). Im Alltag eingesetzt und getestet bisher mit Claude Code; dafür ergänzt [integrations/claude-code/](integrations/claude-code/) einen Nachrichten-Wächter, den Befehl `/consult` und Verhaltensregeln.
+AI-Connect ist ein MCP-Server: Assistenten schicken einander Nachrichten, teilen Code-Kontext und klären Fragen gemeinsam, wobei sie selbst entscheiden, wann sie sich melden. Es funktioniert mit jedem MCP-fähigen Client (Claude Code, Claude Desktop, Cursor, VS Code, Codex CLI, …). Im Alltag eingesetzt und getestet bisher mit Claude Code; dafür ergänzt [integrations/claude-code/](integrations/claude-code/) einen Nachrichten-Wächter, den Befehl `/consult` und Verhaltensregeln.
 
 [English Version](README.md)
 
@@ -11,6 +11,8 @@ Funktioniert mit jedem MCP-fähigen Client (Claude Code, Claude Desktop, Cursor,
 ## Features
 
 - **Nachrichten zwischen Assistenten** über Rechnergrenzen, an einen Peer oder an alle (`*`)
+- **Jedes Konto, jede Person**: Peers müssen nur die Bridge erreichen — eigene Sitzungen, die Sitzung eines Kollegen mit seinem eigenen Abo oder jeder andere MCP-Client
+- **Selbst betrieben**: Die Bridge läuft im eigenen LAN oder VPN; Nachrichten laufen über keinen fremden Dienst
 - **Code-Kontext**: eine Datei oder einige ihrer Zeilen reisen mit einer Frage mit und sind auf dem anderen Rechner lesbar
 - **Offline-Zustellung**: Direktnachrichten warten in der Bridge, bis der Empfänger online ist
 - **Ein Peer pro Claude-Code-Sitzung**, benannt als `Host:Projekt` (z.B. `Mini:AIfred-Intelligence`)
@@ -28,6 +30,24 @@ Multi-Agent-Frameworks legen ihre Agenten im Code fest, Orchestrierungswerkzeuge
 - **Festgefahren**: eine andere Sitzung um einen frischen Blick bitten
 - **Client-Server-Aufbauten**: Die Sitzung auf dem Server und die auf dem Client stimmen Configs, Ports und Versionen ab, ohne Kopieren zwischen Fenstern
 - **Geteilte Ressourcen**: Sitzungen in verschiedenen Projekten klären, wer gerade eine GPU, einen Testrechner oder ein Deployment belegt
+- **Zusammenarbeit mit anderen**: Die eigene Sitzung und die eines Kollegen stimmen eine Schnittstelle ab, jede mit ihrem eigenen Konto
+
+## AI-Connect und Claude Codes eingebaute Kommunikation
+
+Seit v2.1.224 kann Claude Code selbst Nachrichten an die eigenen anderen Sitzungen schicken (`ListAgents` / `SendMessage`, siehe [Doku](https://code.claude.com/docs/en/cross-session-messaging)). Laufen alle Sitzungen unter einem claude.ai-Konto, ist das die einfachste Wahl; auf einem Rechner braucht es überhaupt keine Einrichtung. AI-Connect deckt ab, was es nicht kann:
+
+| | Claude Code eingebaut | AI-Connect |
+|---|---|---|
+| Wer kann reden | Sitzungen eines claude.ai-Kontos | Alle, die die Bridge erreichen: andere Personen, andere Konten und Abos, andere MCP-Clients |
+| Über Rechnergrenzen | Per Remote Control über Anthropics Server; braucht eine claude.ai-Anmeldung (nicht mit API-Key, Bedrock, Vertex oder Foundry) | Über die eigene Bridge im LAN oder VPN |
+| Verlauf | Keiner zum späteren Nachlesen | `peer_history`, in SQLite auf der Bridge |
+| Empfänger offline | Wartet nur, solange die Remote-Control-Verbindung eines Rechners unterbrochen ist | Auf der Bridge gespeichert, zugestellt, sobald der Peer wieder da ist |
+| Empfänger | Eine Sitzung pro Nachricht | Ein Peer oder alle (`*`) |
+| Inhalt | Reiner Text | Text plus Dateiausschnitte |
+| Wecken einer ruhenden Sitzung | Eingebaut | Über den [Wächter](#auf-nachrichten-warten) |
+| Einrichtung | Keine | Bridge plus MCP-Client |
+
+Beides lässt sich parallel nutzen. (Stand: Claude Code 2.1.289, Oktober 2026.)
 
 ## Funktionsweise
 
@@ -66,6 +86,8 @@ cd AI-Connect
 ```
 
 Das Skript legt eine venv an, installiert `requirements.txt`, schreibt `~/.config/ai-connect/config.yaml` und richtet `ai-connect.service` (Bridge, Port 9999) sowie `ai-connect-mcp.service` (MCP über HTTP/SSE, Port 9998) ein und startet sie. Clients auf anderen Rechnern müssen Port 9999 erreichen können.
+
+> **Sicherheit:** Die Bridge hat weder Authentifizierung noch Verschlüsselung — wer Port 9999 erreicht, kann unter jedem Namen Nachrichten lesen und senden. Sie gehört in ein vertrauenswürdiges LAN. Um Rechner anderer Leute anzubinden, ein VPN nutzen (z. B. WireGuard oder Tailscale), statt den Port ins Internet zu öffnen.
 
 ### 2. MCP-Client (jeder weitere Rechner)
 
@@ -201,12 +223,13 @@ claude mcp list                       # Ist ai-connect eingetragen und verbunden
 | „Nicht verbunden“ | Falsches `bridge.host` | Auf Client-Rechnern muss es die IP des Bridge-Rechners sein, nicht `0.0.0.0` |
 | Connection refused | Bridge läuft nicht | `sudo systemctl start ai-connect` auf dem Bridge-Rechner |
 | Timeout | Firewall | Port 9999 auf dem Bridge-Rechner öffnen |
-| Eine Sitzung verliert ständig die Verbindung | Zwei Sitzungen mit gleichem Namen | Eine schließen oder `AI_CONNECT_PEER_NAME` setzen |
+| `peer_status` zeigt Standby | Eine andere Sitzung hat denselben Namen übernommen | Eine schließen oder `AI_CONNECT_PEER_NAME` setzen; die Sitzung im Standby holt sich den Namen zurück, sobald die andere geht |
 
 ## Einschränkungen
 
-- **Kein Wecken bei Nachricht**: Eine eingehende Nachricht weckt keine Claude-Code-Sitzung. Der [Wächter](#auf-nachrichten-warten) umgeht das zwischen zwei Runden; eine bereits laufende Runde wird nicht unterbrochen, die Nachricht wird aufgegriffen, wenn sie endet.
-- **Kein Auslöser von außen**: Claude Codes [Hooks](https://code.claude.com/docs/en/hooks) können Kontext nur einspeisen, wenn der User etwas schickt; eine laufende Sitzung lässt sich von außen nicht anstoßen.
+- **Wecken nur über den Wächter**: Eine AI-Connect-Nachricht weckt eine Claude-Code-Sitzung nicht von selbst. Der [Wächter](#auf-nachrichten-warten) umgeht das zwischen zwei Runden; eine bereits laufende Runde wird nicht unterbrochen, die Nachricht wird aufgegriffen, wenn sie endet.
+- **Claude Codes eigener Posteingang noch ungenutzt**: Claude Code gibt inzwischen jeder Sitzung einen Inbox-Socket, und eine Nachricht von den eigenen Kindprozessen der Sitzung weckt sie direkt ([Doku](https://code.claude.com/docs/en/cross-session-messaging#the-sessions-inbox-socket)). Der Wächter könnte darüber zustellen, statt sich zu beenden; das ist noch nicht umgesetzt.
+- **Keine Authentifizierung, keine Verschlüsselung**: siehe den [Sicherheitshinweis](#1-bridge-server-ein-rechner-zb-heimserver-oder-raspberry-pi).
 - **Kontext nur auf Zuruf**: Assistenten teilen Code nur, wenn sie `peer_context` aufrufen; niemand weiß automatisch, woran die anderen arbeiten.
 - **Linux mit systemd** für die Dienste; auf anderen Plattformen müssen die Dienste von Hand eingerichtet werden.
 
