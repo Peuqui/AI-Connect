@@ -118,6 +118,8 @@ git clone https://github.com/Peuqui/AI-Connect.git %USERPROFILE%\AI-Connect
 
 - Braucht Python 3.10+ (von python.org mit dem Starter `py`, oder aus dem Microsoft Store) und Claude Code nativ unter Windows installiert.
 - Dienste sind geplante Aufgaben, die bei der Anmeldung starten, ohne Konsolenfenster, als dein Benutzer. Sie anzulegen (`-Server`, `-Http`) und die Firewall-Regel für Port 9999 (nur private Netzwerke) braucht Administratorrechte: Das Skript fragt einmal per UAC. Ein Client braucht keine.
+- Ein heruntergeladenes ZIP trägt das Windows-Merkmal „aus dem Internet“, ein Doppelklick auf `install.cmd` zeigt dann eine Sicherheitswarnung. Vor dem Entpacken: ZIP → Eigenschaften → „Zulassen“ anhaken, oder in PowerShell `Unblock-File AI-Connect-<Version>-windows.zip`.
+- Ein Update per ZIP entpackt in einen neuen Ordner: `install.cmd` dort erneut ausführen, damit Claude-Code-Registrierung und Aufgaben auf den neuen Pfad zeigen. Mit `git clone` genügen `git pull` und `install.cmd -Update`.
 - Der native Claude-Installer trägt `%USERPROFILE%\.local\bin` nicht in den `PATH` ein; der AI-Connect-Installer findet `claude.exe` dort trotzdem, für das Terminal sollte man es aber eintragen.
 - Getestet unter Windows 11 mit Claude Code 2.1.289 (Client und Server); `-Http` und das Python aus dem Microsoft Store noch nicht.
 
