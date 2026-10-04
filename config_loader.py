@@ -21,3 +21,14 @@ def load_config() -> dict:
         )
     with open(CONFIG_PATH) as f:
         return yaml.safe_load(f)
+
+
+# Listening on these means "on every address of this machine"; as a target
+# they mean this machine. Linux accepts 0.0.0.0 as a target, Windows refuses
+# it (WinError 1214), so clients on the Bridge machine connect to loopback.
+_LISTEN_ALL_TO_LOOPBACK = {"0.0.0.0": "127.0.0.1", "::": "::1"}
+
+
+def bridge_target(host: str) -> str:
+    """The address a client connects to for bridge.host."""
+    return _LISTEN_ALL_TO_LOOPBACK.get(host, host)

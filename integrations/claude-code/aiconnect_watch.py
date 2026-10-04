@@ -34,7 +34,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import websockets
 
-from config_loader import load_config
+from config_loader import bridge_target, load_config
 from peer_name import session_name
 
 # Below Claude Code's two-hour limit for background tasks
@@ -57,7 +57,7 @@ def session_peer_name() -> str | None:
 
 async def watch(peer: str) -> None:
     bridge = load_config()["bridge"]
-    uri = f"ws://{bridge['host']}:{bridge['port']}"
+    uri = f"ws://{bridge_target(bridge['host'])}:{bridge['port']}"
     headers = {"Authorization": f"Bearer {bridge['token']}"}
     async with websockets.connect(uri, additional_headers=headers) as ws:
         await ws.send(json.dumps({"type": "watch", "peer": peer}))

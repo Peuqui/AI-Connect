@@ -14,7 +14,7 @@ from fastmcp import FastMCP
 
 import tools
 from bridge_client import get_client, init_client
-from config_loader import load_config
+from config_loader import bridge_target, load_config
 
 # The exact command of this installation: same Python (it has websockets),
 # real path. The tool descriptions carry it, so every assistant can start
@@ -47,7 +47,7 @@ def create_app(peer_name: str) -> FastMCP:
     @asynccontextmanager
     async def lifespan(app):
         bridge = load_config()["bridge"]
-        await init_client(host=bridge["host"], port=bridge["port"], peer_name=peer_name, token=bridge["token"])
+        await init_client(host=bridge_target(bridge["host"]), port=bridge["port"], peer_name=peer_name, token=bridge["token"])
         yield
         client = get_client()
         if client:
