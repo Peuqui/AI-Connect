@@ -120,6 +120,8 @@ async def peer_send(to: str, message: str, file: str | None, lines: str | None) 
 
 async def peer_read() -> str:
     client = get_client()
+    if client and client.standby:
+        return "⏸️ This session is on standby: another one holds its name for now. Try again in a few seconds."
     if not client or not client.connected:
         return NOT_CONNECTED
     messages = client.pop_messages()
