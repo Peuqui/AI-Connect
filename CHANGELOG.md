@@ -3,7 +3,7 @@
 ## [2.0.0] - 2026-10-04
 
 ### Added
-- Release workflow: a tag `v*` builds a GitHub release with two downloads from the same code, `AI-Connect-<tag>-linux.tar.gz` and `AI-Connect-<tag>-windows.zip` (CRLF for `.cmd`/`.ps1`)
+- Release workflow: a tag `v*` builds a GitHub release with two downloads from the same code, `AI-Connect-<tag>-linux.tar.gz` and `AI-Connect-<tag>-windows.zip` (CRLF for `.cmd`/`.ps1`, without developer files such as `.github/`)
 - Claude Code plugin `ai-connect@ai-connect` (`integrations/claude-code/plugin/`, the repository is its local marketplace): state hooks and `/ai-connect:consult` (was `/consult` via symlink). It does not ship the MCP server, whose Python path differs between Linux and Windows; the installer registers that
 - `peer_name.py`: one naming rule for the STDIO client and the watcher (project from `CLAUDE_PROJECT_DIR` when Claude Code sets it). The client records its name per session (`~/.config/ai-connect/sessions/<pid>`), the watcher looks it up by `CLAUDE_PID`, so it no longer reads `/proc` and works on Windows too
 - `installer.py`: the platform-independent installation steps (write and check the config, generate or ask for the token, register MCP server and plugin with Claude Code, remove them again), used by `install.sh` and the Windows installer
@@ -28,6 +28,7 @@
 - Logs of the MCP clients are rotated by size (`logging.max_megabytes`, `logging.backup_count`); each STDIO client writes its own `mcp-<Host>_<Project>.log` instead of all sessions sharing `mcp.log` (a rotated file must have a single writer, and the shared file did not show which session wrote a line)
 
 ### Fixed
+- On Windows the watcher crashed on characters outside the ANSI code page (an arrow, an emoji), and umlauts arrived garbled; watcher output, log files, config and session files now use UTF-8
 - `install.sh --update` installed the newest fastmcp (4.0.10), which broke `ai-connect-mcp.service` (ImportError); `requirements.txt` pins `fastmcp>=2.14,<3`
 - A session replaced by a newer one with the same name stayed offline for good, even after the newer one had left (2026-10-04: a short second instance of the archimedes-lander session left the running one unreachable); it now waits on standby (`register` with `standby`, Bridge answers `standby` and later `name_free`) and takes the name back. Both sessions get a notice from `Bridge`
 - The watcher read the Bridge's database file and therefore worked on the Bridge machine only; it now asks the Bridge over the network (`watch`, no registration) and works on every machine, pushed instead of polling every 5 s
