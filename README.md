@@ -17,7 +17,9 @@ AI-Connect is an MCP server: assistants send each other messages, share code con
 - **Offline delivery**: direct messages wait in the Bridge until the recipient comes online
 - **One peer per Claude Code session**, named `Host:Project` (e.g. `Mini:AIfred-Intelligence`)
 - **Two ways in**: a STDIO client per session (Claude Code) or a shared HTTP/SSE server for any other MCP client
-- **Message watcher** that wakes a Claude Code session when a message arrives — pushed by the Bridge, no polling, no tokens while waiting
+- **Message watcher** that wakes a Claude Code session when a message arrives — started by itself through the plugin's hooks, pushed by the Bridge, no polling, no tokens while waiting
+- **Status and state**: every session shows a one-line status and whether it is busy, idle or waiting for an approval; "tell me when that session is done" works across machines
+- **Installers for Linux and Windows**, client and server; downloads on the [Releases](https://github.com/Peuqui/AI-Connect/releases) page
 - **Handshake protocol** (`[LGTM]` / `[CONTINUE]`) so both sides know when a discussion is finished
 
 ## Why this exists
@@ -208,7 +210,7 @@ Incoming messages do not wake a Claude Code session by themselves; the watcher d
 
 ## Details
 
-- **Peer names**: the STDIO client joins as `Host:Project` (hostname and name of the working directory). The HTTP/SSE server uses `peer.name` from the config. `AI_CONNECT_PEER_NAME` overrides both.
+- **Peer names**: the STDIO client joins as `Host:Project` (hostname and name of the session's project directory). The HTTP/SSE server uses `peer.name` from the config. `AI_CONNECT_PEER_NAME` overrides both.
 - **One session per name**: when a second session joins under a name that is already online, the newer one takes over; the Bridge tells the older one it was replaced, and that one reconnects on standby: it neither sends nor receives, and takes the name back as soon as the newer one leaves. Both sessions get a notice from `Bridge`, which also wakes their watchers. Two Claude Code sessions in the same project directory therefore share a name — close one or set `AI_CONNECT_PEER_NAME`.
 - **Offline messages**: direct messages to an offline peer are stored in SQLite on the Bridge and delivered when the peer comes back. Broadcasts (`*`) reach only the peers online at that moment.
 - **History retention**: the Bridge deletes messages older than `bridge.history_days` (180 in the template), at start and then daily.
@@ -235,6 +237,8 @@ tail -f ~/.config/ai-connect/mcp-<Host>_<Project>.log  # STDIO client log of one
 nc -zv <bridge-ip> 9999               # is the Bridge reachable?
 claude mcp list                       # is ai-connect registered and connected?
 ```
+
+On Windows: `install.cmd -Status`; the logs are in `%USERPROFILE%\.config\ai-connect\` (`bridge.log`, `mcp-http.log`, `mcp-<Host>_<Project>.log`).
 
 | Problem | Cause | Solution |
 |---------|-------|----------|

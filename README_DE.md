@@ -17,7 +17,9 @@ AI-Connect ist ein MCP-Server: Assistenten schicken einander Nachrichten, teilen
 - **Offline-Zustellung**: Direktnachrichten warten in der Bridge, bis der Empfänger online ist
 - **Ein Peer pro Claude-Code-Sitzung**, benannt als `Host:Projekt` (z.B. `Mini:AIfred-Intelligence`)
 - **Zwei Zugänge**: ein STDIO-Client pro Sitzung (Claude Code) oder ein gemeinsamer HTTP/SSE-Server für jeden anderen MCP-Client
-- **Nachrichten-Wächter**, der eine Claude-Code-Sitzung bei einer neuen Nachricht weckt — von der Bridge angestoßen, ohne Polling, ohne Tokens beim Warten
+- **Nachrichten-Wächter**, der eine Claude-Code-Sitzung bei einer neuen Nachricht weckt — startet von selbst über die Hooks des Plugins, von der Bridge angestoßen, ohne Polling, ohne Tokens beim Warten
+- **Status und Zustand**: Jede Sitzung zeigt eine Statuszeile und ob sie arbeitet, fertig ist oder auf eine Freigabe wartet; „sag mir, wenn die Sitzung fertig ist“ funktioniert über Rechnergrenzen
+- **Installer für Linux und Windows**, Client und Server; Downloads auf der Seite [Releases](https://github.com/Peuqui/AI-Connect/releases)
 - **Handshake-Protokoll** (`[LGTM]` / `[CONTINUE]`), damit beide Seiten wissen, wann eine Diskussion abgeschlossen ist
 
 ## Warum es das gibt
@@ -208,7 +210,7 @@ Eingehende Nachrichten wecken eine Claude-Code-Sitzung nicht von selbst; das üb
 
 ## Details
 
-- **Peer-Namen**: Der STDIO-Client tritt als `Host:Projekt` bei (Hostname und Name des Arbeitsverzeichnisses). Der HTTP/SSE-Server nimmt `peer.name` aus der Config. `AI_CONNECT_PEER_NAME` überschreibt beides.
+- **Peer-Namen**: Der STDIO-Client tritt als `Host:Projekt` bei (Hostname und Name des Projektverzeichnisses der Sitzung). Der HTTP/SSE-Server nimmt `peer.name` aus der Config. `AI_CONNECT_PEER_NAME` überschreibt beides.
 - **Eine Sitzung pro Name**: Tritt eine zweite Sitzung unter einem Namen bei, der schon online ist, übernimmt die neuere; die Bridge teilt der älteren mit, dass sie ersetzt wurde, und diese verbindet sich im Standby neu: Sie sendet und empfängt nichts und holt sich den Namen zurück, sobald die neuere geht. Beide Sitzungen bekommen einen Hinweis von `Bridge`, der auch ihre Wächter weckt. Zwei Claude-Code-Sitzungen im selben Projektverzeichnis teilen sich deshalb einen Namen — eine schließen oder `AI_CONNECT_PEER_NAME` setzen.
 - **Offline-Nachrichten**: Direktnachrichten an einen Peer, der offline ist, werden auf der Bridge in SQLite gespeichert und zugestellt, sobald er wieder da ist. Rundrufe (`*`) erreichen nur die Peers, die in dem Moment online sind.
 - **Aufbewahrung des Verlaufs**: Die Bridge löscht Nachrichten, die älter als `bridge.history_days` sind (180 in der Vorlage), beim Start und danach täglich.
@@ -235,6 +237,8 @@ tail -f ~/.config/ai-connect/mcp-<Host>_<Projekt>.log  # STDIO-Client-Log einer 
 nc -zv <bridge-ip> 9999               # Ist die Bridge erreichbar?
 claude mcp list                       # Ist ai-connect eingetragen und verbunden?
 ```
+
+Unter Windows: `install.cmd -Status`; die Logs liegen in `%USERPROFILE%\.config\ai-connect\` (`bridge.log`, `mcp-http.log`, `mcp-<Host>_<Projekt>.log`).
 
 | Problem | Ursache | Lösung |
 |---------|---------|--------|

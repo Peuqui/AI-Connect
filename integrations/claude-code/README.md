@@ -16,7 +16,7 @@ The MCP server is registered by the installer rather than shipped in the plugin 
 Coming from an earlier setup:
 
 - Remove old command links in `~/.claude/commands/` (`consult.md`, `beratung.md`); the consult command is gone, see the changelog.
-- Delete hooks you added by hand for `peer_set_state`; the plugin brings them.
+- Delete hooks you added by hand for `peer_set_state`, and any hook or rule of your own that tells sessions to start the watcher; the plugin brings them.
 - Tool permissions are named `mcp__ai-connect__<tool>`.
 
 ### 2. Include the behaviour rules
@@ -33,4 +33,4 @@ Claude Code resolves `@` imports when it loads the file. A plugin cannot load su
 
 ### The watcher
 
-The plugin starts the watcher as an `asyncRewake` hook at session start and after every turn (`plugin/watch.sh`, which picks the venv's Python on Linux and Windows). When a message for the session arrives, it exits with code 2 and Claude Code wakes the session; the session calls `peer_read`. Sessions never start it themselves. One watcher per session, missed messages are reported at once, and it reconnects after a Bridge restart; see the main README.
+The plugin starts the watcher as an `asyncRewake` hook at session start and after every turn (`plugin/watch.sh`, which picks the venv's Python on Linux and Windows). When a message for the session arrives, it exits with code 2 and Claude Code wakes the session; the session calls `peer_read`. Sessions never start it themselves. One watcher per session, missed messages are reported at once, and it reconnects after a Bridge restart; see the main README. Its hooks set a 7-day timeout: Claude Code otherwise ends asyncRewake hooks after its default 600 s, and an idle session would no longer be woken.
