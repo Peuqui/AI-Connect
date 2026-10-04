@@ -2,7 +2,7 @@
 #
 # Usage (or double-click install.cmd for the interactive installation):
 #   install.cmd -Client          # Client: venv, config, Claude Code (no service, no admin)
-#   install.cmd -Server          # Server: Bridge task + firewall rule + everything the client gets
+#   install.cmd -Server          # Server: Bridge task + firewall rule + everything the client gets (admin, via UAC)
 #   install.cmd -Client -Http    # also the HTTP/SSE task for other MCP clients
 #   install.cmd -Update          # Update; detects what is installed
 #   install.cmd -Status          # Show status
@@ -10,7 +10,9 @@
 #
 # Config and the Claude Code registration are platform independent and live
 # in installer.py; this script does the Windows part: venv, scheduled tasks
-# (started at logon, restarted on failure) and the firewall rule.
+# (started at logon, restarted on failure) and the firewall rule. Tasks and
+# firewall need administrator rights; the script then restarts itself
+# elevated, but the tasks run as the user without elevation.
 # ASCII only: Windows PowerShell 5.1 misreads UTF-8 files without a BOM.
 
 param(
@@ -19,7 +21,9 @@ param(
     [switch]$Http,
     [switch]$Update,
     [switch]$Status,
-    [switch]$Uninstall
+    [switch]$Uninstall,
+    # Set by Restart-Elevated: keep the elevated window open at the end
+    [switch]$Elevated
 )
 
 $ErrorActionPreference = 'Stop'
@@ -44,9 +48,19 @@ function Test-Task([string]$Name) {
     return [bool](Get-ScheduledTask -TaskName $Name -ErrorAction SilentlyContinue)
 }
 
-function Invoke-Elevated([string]$Command) {
-    # Firewall rules need administrator rights; Windows asks through UAC
-    Start-Process powershell -Verb RunAs -Wait -ArgumentList "-NoProfile -Command $Command"
+function Test-Admin {
+    $Identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+    return (New-Object Security.Principal.WindowsPrincipal $Identity).IsInRole(
+        [Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+
+function Restart-Elevated([string[]]$Switches) {
+    # Logon tasks and firewall rules need administrator rights, even for the
+    # own user; Windows asks once through UAC, then this script runs again
+    Write-Host 'Tasks and firewall need administrator rights; Windows asks for them now...'
+    $Arguments = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`"") + $Switches + @('-Elevated')
+    Start-Process powershell -Verb RunAs -Wait -ArgumentList $Arguments
+    exit
 }
 
 function Show-Status {
@@ -71,15 +85,20 @@ function Show-Status {
 function Install-Task([string]$Name, [string]$Module) {
     $Action = New-ScheduledTaskAction -Execute $PythonW -Argument "-m $Module" -WorkingDirectory $Repo
     $Trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
+    # Runs as the user without elevation, although registered from an elevated shell
+    $Principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited
     $Settings = New-ScheduledTaskSettingsSet -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) `
         -ExecutionTimeLimit ([TimeSpan]::Zero) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
-    Register-ScheduledTask -TaskName $Name -Action $Action -Trigger $Trigger -Settings $Settings -Force | Out-Null
+    Register-ScheduledTask -TaskName $Name -Action $Action -Trigger $Trigger -Principal $Principal -Settings $Settings -Force | Out-Null
     Stop-ScheduledTask -TaskName $Name
     Start-ScheduledTask -TaskName $Name
     Write-Host "  $Name running" -ForegroundColor Green
 }
 
 function Uninstall-AIConnect {
+    if (((Test-Task $BridgeTask) -or (Test-Task $HttpTask)) -and -not (Test-Admin)) {
+        Restart-Elevated @('-Uninstall')
+    }
     $Confirm = Read-Host 'Really uninstall AI-Connect? [y/N]'
     if ($Confirm -notmatch '^[yY]$') { Write-Host 'Aborted.'; exit 0 }
 
@@ -91,7 +110,7 @@ function Uninstall-AIConnect {
         }
     }
     if (Get-NetFirewallRule -DisplayName $FirewallRule -ErrorAction SilentlyContinue) {
-        Invoke-Elevated "Remove-NetFirewallRule -DisplayName '$FirewallRule'"
+        Remove-NetFirewallRule -DisplayName $FirewallRule
         Write-Host '  Firewall rule removed' -ForegroundColor Green
     }
     if (Test-Path $Python) {
@@ -104,6 +123,7 @@ function Uninstall-AIConnect {
     }
     Write-Host ''
     Write-Host "The venv stays; remove it with: Remove-Item -Recurse $(Join-Path $Repo 'venv')"
+    if ($Elevated) { Read-Host 'Done. Press Enter to close this window' | Out-Null }
     exit 0
 }
 
@@ -137,6 +157,12 @@ if (-not $Mode) {
     if ((Read-Host 'Also the HTTP/SSE task for other MCP clients (VS Code, Cursor, ...)? [y/N]') -match '^[yY]$') {
         $Http = $true
     }
+}
+
+if (($Mode -eq 'server' -or $Http) -and -not (Test-Admin)) {
+    $Switches = @("-$Mode")
+    if ($Http) { $Switches += '-Http' }
+    Restart-Elevated $Switches
 }
 
 Write-Host ''
@@ -176,9 +202,9 @@ Write-Host '[4/4] Services...' -ForegroundColor Yellow
 if ($Mode -eq 'server') {
     Install-Task $BridgeTask 'server.main'
     if (-not (Get-NetFirewallRule -DisplayName $FirewallRule -ErrorAction SilentlyContinue)) {
-        Write-Host "  Opening port $BridgePort for private networks (Windows asks for administrator rights)..."
-        Invoke-Elevated ("New-NetFirewallRule -DisplayName '$FirewallRule' -Direction Inbound -Protocol TCP " +
-            "-LocalPort $BridgePort -Action Allow -Profile Private")
+        New-NetFirewallRule -DisplayName $FirewallRule -Direction Inbound -Protocol TCP `
+            -LocalPort $BridgePort -Action Allow -Profile Private | Out-Null
+        Write-Host "  Firewall: port $BridgePort open for private networks" -ForegroundColor Green
     }
 }
 if ($Http) { Install-Task $HttpTask 'client.http_server' }
@@ -194,3 +220,4 @@ if ($Http) {
     Write-Host 'Other MCP clients connect to http://127.0.0.1:9998/sse'
 }
 Write-Host ''
+if ($Elevated) { Read-Host 'Done. Press Enter to close this window' | Out-Null }
