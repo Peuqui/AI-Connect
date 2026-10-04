@@ -68,8 +68,8 @@ function Restart-Elevated([string[]]$Switches) {
     Write-Host 'Tasks and firewall need administrator rights; Windows asks for them now...'
     $Arguments = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`"") + $Switches +
         @('-Elevated', '-TaskUser', "`"$TaskUser`"")
-    Start-Process powershell -Verb RunAs -Wait -ArgumentList $Arguments
-    exit
+    $Run = Start-Process powershell -Verb RunAs -Wait -PassThru -ArgumentList $Arguments
+    exit $Run.ExitCode
 }
 
 function Show-Status {
@@ -105,11 +105,18 @@ function Install-Task([string]$Name, [string]$Module) {
 }
 
 function Uninstall-AIConnect {
-    if (((Test-Task $BridgeTask) -or (Test-Task $HttpTask)) -and -not (Test-Admin)) {
+    # Asked before elevating, so an abort does not close the elevated window unseen
+    if (-not $Elevated) {
+        $Confirm = Read-Host 'Really uninstall AI-Connect? [y/N]'
+        if ($Confirm -notmatch '^[yY]$') { Write-Host 'Aborted.'; exit 0 }
+    }
+    # Tasks and the firewall rule need administrator rights to remove; a
+    # broken task may even be invisible to the user, so any trace counts
+    $NeedsAdmin = (Test-Task $BridgeTask) -or (Test-Task $HttpTask) -or
+        [bool](Get-NetFirewallRule -DisplayName $FirewallRule -ErrorAction SilentlyContinue)
+    if ($NeedsAdmin -and -not (Test-Admin)) {
         Restart-Elevated @('-Uninstall')
     }
-    $Confirm = Read-Host 'Really uninstall AI-Connect? [y/N]'
-    if ($Confirm -notmatch '^[yY]$') { Write-Host 'Aborted.'; exit 0 }
 
     foreach ($Task in @($HttpTask, $BridgeTask)) {
         if (Test-Task $Task) {
