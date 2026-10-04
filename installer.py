@@ -96,6 +96,21 @@ def write_config(server: bool) -> None:
     print(f"  Config written: {CONFIG_PATH}")
 
 
+def _find_claude() -> str | None:
+    """Claude Code's CLI: from PATH, else where its native installer puts it.
+
+    On Windows the native installer does not add ~/.local/bin to PATH.
+    """
+    found = shutil.which("claude")
+    if found:
+        return found
+    native = Path.home() / ".local" / "bin" / ("claude.exe" if sys.platform == "win32" else "claude")
+    if native.exists():
+        print(f"  {native} is not in PATH; using it directly. Add {native.parent} to PATH for the terminal.")
+        return str(native)
+    return None
+
+
 def _claude(claude: str, *args: str) -> subprocess.CompletedProcess:
     # check=False: the callers judge the return code themselves (see _check)
     return subprocess.run([claude, *args], capture_output=True, text=True, check=False)
@@ -108,7 +123,7 @@ def _check(result: subprocess.CompletedProcess, what: str) -> None:
 
 def register_claude() -> None:
     """Register the MCP server (with this venv's Python) and the plugin with Claude Code."""
-    claude = shutil.which("claude")
+    claude = _find_claude()
     if claude is None:
         print(
             "  Claude Code not found in PATH. Once it is installed, run:\n"
@@ -145,7 +160,7 @@ def register_claude() -> None:
 
 def unregister_claude() -> None:
     """Remove the MCP server, the plugin and the marketplace from Claude Code."""
-    claude = shutil.which("claude")
+    claude = _find_claude()
     if claude is None:
         print("  Claude Code not found in PATH, nothing to remove there")
         return
