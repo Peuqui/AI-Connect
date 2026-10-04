@@ -30,14 +30,14 @@ def record_session_name(session_pid: int, name: str) -> Path:
     """Note which peer name the session with this process id uses."""
     SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
     path = SESSIONS_DIR / str(session_pid)
-    path.write_text(name)
+    path.write_text(name, encoding="utf-8")
     return path
 
 
 def session_name(session_pid: str) -> str | None:
     """The peer name the session with this process id recorded, if any."""
     path = SESSIONS_DIR / session_pid
-    return path.read_text() if path.exists() else None
+    return path.read_text(encoding="utf-8") if path.exists() else None
 
 
 def session_pid() -> int:

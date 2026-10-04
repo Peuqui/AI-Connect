@@ -19,7 +19,7 @@ def load_config() -> dict:
             f"AI-Connect config not found: {CONFIG_PATH}\n"
             f"Run ./install.sh or create it from config.yaml.example."
         )
-    with open(CONFIG_PATH) as f:
+    with open(CONFIG_PATH, encoding="utf-8") as f:
         return yaml.safe_load(f)
 
 

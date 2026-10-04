@@ -42,13 +42,13 @@ def _dotted_keys(tree: dict, prefix: str = "") -> set[str]:
 
 
 def _example() -> dict:
-    with open(CONFIG_EXAMPLE) as f:
+    with open(CONFIG_EXAMPLE, encoding="utf-8") as f:
         return yaml.safe_load(f)
 
 
 def check_config() -> None:
     """Stop with a list of the keys config.yaml lacks compared to the template."""
-    with open(CONFIG_PATH) as f:
+    with open(CONFIG_PATH, encoding="utf-8") as f:
         missing = _dotted_keys(_example()) - _dotted_keys(yaml.safe_load(f))
     if missing:
         sys.exit(
@@ -89,7 +89,7 @@ def write_config(server: bool) -> None:
         config["bridge"]["token"] = _ask("Bridge token (bridge.token in the Bridge machine's config)")
 
     CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with open(CONFIG_PATH, "w") as f:
+    with open(CONFIG_PATH, "w", encoding="utf-8") as f:
         yaml.safe_dump(config, f, sort_keys=False)
     # The token is a secret; on Windows this only clears the read-only flag
     CONFIG_PATH.chmod(0o600)
