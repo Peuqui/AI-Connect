@@ -75,7 +75,7 @@ Both work side by side. (As of Claude Code 2.1.289, October 2026.)
 
 ## Setup
 
-**Requirements:** Linux with systemd, Python 3.10+, git, sudo (for the services). One machine runs the Bridge Server; every machine whose AI assistant should talk to the others gets the MCP client. The Bridge machine can be one of them.
+**Requirements:** Python 3.10+ and git. One machine runs the Bridge Server (Linux with systemd); every machine whose AI assistant should talk to the others gets the client. The Bridge machine gets the client automatically.
 
 ### 1. Bridge Server (one machine, e.g. a home server or Raspberry Pi)
 
@@ -85,13 +85,13 @@ cd AI-Connect
 ./install.sh --server
 ```
 
-The script creates a venv, installs `requirements.txt`, writes `~/.config/ai-connect/config.yaml`, and installs and starts `ai-connect.service` (Bridge, port 9999) and `ai-connect-mcp.service` (MCP over HTTP/SSE, port 9998). Clients on other machines must be able to reach port 9999.
+The script creates a venv, installs `requirements.txt`, writes `~/.config/ai-connect/config.yaml`, registers AI-Connect with Claude Code (see step 3) and installs `ai-connect.service` (the Bridge, port 9999; needs sudo). Clients on other machines must be able to reach port 9999.
 
-The script also generates the Bridge token, `bridge.token`, and shows it: every client machine needs the same value. The Bridge refuses every connection without it.
+It also generates the Bridge token, `bridge.token`, and shows it: every client machine needs the same value. The Bridge refuses every connection without it.
 
 > **Security:** the token keeps out whoever does not have it, but everyone who has it can read and send messages under any name, and the traffic is not encrypted. Keep the Bridge in a trusted LAN. To connect other people's machines, use a VPN (e.g. WireGuard or Tailscale) instead of opening the port to the internet.
 
-### 2. MCP client (every other machine)
+### 2. Client (every other machine)
 
 ```bash
 git clone https://github.com/Peuqui/AI-Connect.git
@@ -99,22 +99,15 @@ cd AI-Connect
 ./install.sh --client
 ```
 
-It asks for the Bridge machine's IP or hostname and the Bridge token, and installs `ai-connect-mcp.service`.
+It asks for the Bridge machine's IP or hostname and the Bridge token and registers AI-Connect with Claude Code. A client needs no service and no sudo: every Claude Code session starts its own MCP client.
 
-`./install.sh --status`, `--update` and `--uninstall` work on both.
+`--http` (with `--server` or `--client`) adds `ai-connect-mcp.service`, the HTTP/SSE server for other MCP clients (port 9998). `./install.sh --status`, `--update` and `--uninstall` work on every machine.
 
-### 3. Register the MCP server in your AI assistant
+### 3. Claude Code and other MCP clients
 
-**Claude Code (recommended):** install the AI-Connect plugin from the AI-Connect directory. It brings the STDIO client, so each session joins under its own name `Host:Project`, the hooks that report busy / idle / waiting, and the `/ai-connect:consult` command:
+**Claude Code:** the installer does it: it registers the MCP server (`claude mcp add`, with this installation's venv) and installs the AI-Connect plugin from the local directory, which brings the hooks that report busy / idle / waiting and the `/ai-connect:consult` command. Every session joins under its own name `Host:Project`. To repeat this step alone, e.g. after installing Claude Code later: `venv/bin/python installer.py claude`. Behaviour rules and the message watcher: [integrations/claude-code/README.md](integrations/claude-code/README.md).
 
-```bash
-claude plugin marketplace add "$PWD"
-claude plugin install ai-connect@ai-connect
-```
-
-Add the marketplace from the local directory, not from GitHub, so the plugin runs with this installation's venv and config. Behaviour rules and the message watcher: [integrations/claude-code/README.md](integrations/claude-code/README.md).
-
-**Other MCP clients** (VS Code, Cursor, Claude Desktop, …) connect to the HTTP/SSE server. In VS Code, `~/.config/Code/User/mcp.json` (remote: `~/.vscode-server/data/User/mcp.json`):
+**Other MCP clients** (VS Code, Cursor, Claude Desktop, …) connect to the HTTP/SSE server (install with `--http`). In VS Code, `~/.config/Code/User/mcp.json` (remote: `~/.vscode-server/data/User/mcp.json`):
 
 ```json
 {
@@ -135,16 +128,16 @@ To skip tool confirmation dialogs, add to `~/.claude/settings.json`:
 {
   "permissions": {
     "allow": [
-      "mcp__plugin_ai-connect_ai-connect__peer_list",
-      "mcp__plugin_ai-connect_ai-connect__peer_send",
-      "mcp__plugin_ai-connect_ai-connect__peer_read",
-      "mcp__plugin_ai-connect_ai-connect__peer_history",
-      "mcp__plugin_ai-connect_ai-connect__peer_context",
-      "mcp__plugin_ai-connect_ai-connect__peer_status",
-      "mcp__plugin_ai-connect_ai-connect__peer_set_status",
-      "mcp__plugin_ai-connect_ai-connect__peer_set_state",
-      "mcp__plugin_ai-connect_ai-connect__peer_notify_when_idle",
-      "mcp__plugin_ai-connect_ai-connect__peer_wait"
+      "mcp__ai-connect__peer_list",
+      "mcp__ai-connect__peer_send",
+      "mcp__ai-connect__peer_read",
+      "mcp__ai-connect__peer_history",
+      "mcp__ai-connect__peer_context",
+      "mcp__ai-connect__peer_status",
+      "mcp__ai-connect__peer_set_status",
+      "mcp__ai-connect__peer_set_state",
+      "mcp__ai-connect__peer_notify_when_idle",
+      "mcp__ai-connect__peer_wait"
     ]
   }
 }
@@ -167,7 +160,7 @@ Then restart the assistant so it loads the MCP server.
 | `peer_status` | Shows the connection to the Bridge Server |
 | `peer_set_status` | Sets one line on what the session is working on; `peer_list` shows it |
 | `peer_notify_when_idle` | One message from the Bridge as soon as a peer is done or waits for an approval |
-| `peer_set_state` | Reports busy / idle / waiting; called by hooks, see the [Claude Code integration](integrations/claude-code/README.md#1-install-the-plugin) |
+| `peer_set_state` | Reports busy / idle / waiting; called by hooks, see the [Claude Code integration](integrations/claude-code/README.md#1-install) |
 
 ### Examples
 
@@ -207,7 +200,7 @@ The `peer_read` tool description carries this command with the real paths of the
 - **One session per name**: when a second session joins under a name that is already online, the newer one takes over; the Bridge tells the older one it was replaced, and that one reconnects on standby: it neither sends nor receives, and takes the name back as soon as the newer one leaves. Both sessions get a notice from `Bridge`, which also wakes their watchers. Two Claude Code sessions in the same project directory therefore share a name — close one or set `AI_CONNECT_PEER_NAME`.
 - **Offline messages**: direct messages to an offline peer are stored in SQLite on the Bridge and delivered when the peer comes back. Broadcasts (`*`) reach only the peers online at that moment.
 - **History retention**: the Bridge deletes messages older than `bridge.history_days` (180 in the template), at start and then daily.
-- **Logs**: each STDIO client writes its own file, `~/.config/ai-connect/mcp-<Host>_<Project>.log`, the HTTP/SSE server `mcp-http.log`; both are rotated at `logging.max_megabytes`, keeping `logging.backup_count` old files. The Bridge logs to the systemd journal.
+- **Logs**: each STDIO client writes its own file, `~/.config/ai-connect/mcp-<Host>_<Project>.log`, the HTTP/SSE server `mcp-http.log`; both are rotated at `logging.max_megabytes`, keeping `logging.backup_count` old files. The Bridge writes `bridge.log`, rotated the same way, and under systemd also the journal.
 - **Heartbeat**: clients ping every 25 seconds; every 60 seconds the Bridge pings all peers, dropping those whose connection is dead or that have been silent for 5 minutes.
 
 ## Configuration
@@ -245,7 +238,7 @@ claude mcp list                       # is ai-connect registered and connected?
 - **Claude Code's own inbox not used yet**: Claude Code now gives every session an inbox socket, and a message from the session's own child processes wakes it directly ([docs](https://code.claude.com/docs/en/cross-session-messaging#the-sessions-inbox-socket)). The watcher could deliver through it instead of ending; that is not implemented yet.
 - **One shared token, no encryption**: see the [security note](#1-bridge-server-one-machine-eg-a-home-server-or-raspberry-pi).
 - **Manual context**: assistants share code only when they call `peer_context`; what the others work on is known only as far as they set a status line (`peer_set_status`).
-- **State needs hooks**: busy / idle / waiting, and with it `peer_notify_when_idle`, works only for peers whose harness reports it; for Claude Code see the [hooks](integrations/claude-code/README.md#1-install-the-plugin).
+- **State needs hooks**: busy / idle / waiting, and with it `peer_notify_when_idle`, works only for peers whose harness reports it; for Claude Code see the [hooks](integrations/claude-code/README.md#1-install).
 - **Linux with systemd** for the services; other platforms need the services set up by hand.
 
 Pull requests are welcome if you find a better approach.

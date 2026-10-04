@@ -35,7 +35,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import websockets
 
 from config_loader import load_config
-from peer_name import peer_name
+from peer_name import session_name
 
 # Below Claude Code's two-hour limit for background tasks
 MAX_MINUTES = 110
@@ -44,25 +44,15 @@ MAX_MINUTES = 110
 def session_peer_name() -> str | None:
     """The name the MCP client of this Claude Code session registered with.
 
-    Claude Code starts the MCP client (client/server.py) as its child; the
-    name follows from the client's environment and start directory by the
-    same rule the client uses (peer_name.py). The shell running this script
-    may sit in any directory (a worktree, another project), so its own
-    directory proves nothing: on 2026-09-29 a watcher started from a
-    worktree listened for "Mini:1Cat-vLLM-upstream" and missed every message.
+    The client records it under the session's process id (peer_name.py),
+    and Claude Code passes that id to commands as CLAUDE_PID. The shell
+    running this script may sit in any directory (a worktree, another
+    project), so its own directory proves nothing: on 2026-09-29 a watcher
+    started from a worktree listened for "Mini:1Cat-vLLM-upstream" and
+    missed every message.
     """
     claude_pid = os.environ.get("CLAUDE_PID")
-    if claude_pid is None:
-        return None
-    for children in Path(f"/proc/{claude_pid}/task").glob("*/children"):
-        for child in children.read_text().split():
-            args = Path(f"/proc/{child}/cmdline").read_bytes().split(b"\0")
-            if not any(arg.endswith(b"client/server.py") for arg in args):
-                continue
-            entries = Path(f"/proc/{child}/environ").read_bytes().split(b"\0")
-            environ = dict(entry.decode().split("=", 1) for entry in entries if b"=" in entry)
-            return peer_name(environ, Path(os.readlink(f"/proc/{child}/cwd")))
-    return None
+    return session_name(claude_pid) if claude_pid else None
 
 
 async def watch(peer: str) -> None:

@@ -3,8 +3,9 @@
 ## [Unreleased] - 2026-10-01
 
 ### Added
-- Claude Code plugin: the repository is a plugin marketplace (`.claude-plugin/`); `claude plugin marketplace add <repo>` and `claude plugin install ai-connect@ai-connect` bring the MCP server, the state hooks and `/ai-connect:consult` (was `/consult` via symlink). The plugin is the small directory `integrations/claude-code/plugin/` (manifest, `hooks.json`, `commands/consult.md`); its MCP server runs the repository's venv, so Claude Code's install copy stays a few KB instead of the whole repository with its venv. Replaces `claude mcp add` and hand-written hooks; tool permissions are now named `mcp__plugin_ai-connect_ai-connect__*`
-- `peer_name.py`: one naming rule for the STDIO client and the watcher. The project comes from `CLAUDE_PROJECT_DIR` when Claude Code sets it, because a plugin's MCP server runs in the plugin directory
+- Claude Code plugin `ai-connect@ai-connect` (`integrations/claude-code/plugin/`, the repository is its local marketplace): state hooks and `/ai-connect:consult` (was `/consult` via symlink). It does not ship the MCP server, whose Python path differs between Linux and Windows; the installer registers that
+- `peer_name.py`: one naming rule for the STDIO client and the watcher (project from `CLAUDE_PROJECT_DIR` when Claude Code sets it). The client records its name per session (`~/.config/ai-connect/sessions/<pid>`), the watcher looks it up by `CLAUDE_PID`, so it no longer reads `/proc` and works on Windows too
+- `installer.py`: the platform-independent installation steps (write and check the config, generate or ask for the token, register MCP server and plugin with Claude Code, remove them again), used by `install.sh` and the Windows installer
 - Peer state and status line: `peer_set_status` (one line on the current work) and `peer_set_state` (busy / idle / waiting, reported by hooks; for Claude Code `mcp_tool` hooks on UserPromptSubmit, PostToolUse, Notification and Stop); `peer_list` shows both. `peer_notify_when_idle` asks the Bridge for one message as soon as a peer is done or waits for an approval, across machines. The client resends state and status after every reconnect
 - Bridge token: the Bridge refuses every connection whose handshake lacks `Authorization: Bearer <bridge.token>` (clients, HTTP/SSE server and watcher send it). `install.sh` generates the token on the Bridge machine and asks for it on clients. New required key `bridge.token`; a refused client stops reconnecting and `peer_status` says why
 - The Bridge deletes messages older than `bridge.history_days` from the history, at start and then daily. New required config keys `bridge.history_days` and `logging.*`: add them to existing configs (see `config.yaml.example`)
@@ -13,6 +14,9 @@
 - `config_loader.py`: one config loader for the Bridge and both MCP clients
 
 ### Changed
+- `install.sh` reworked: `--client` installs venv, config and the Claude Code registration only, with no service and no sudo; `--server` adds the Bridge service; `--http` adds the HTTP/SSE service for other MCP clients (was installed on every machine)
+- The Bridge also logs to a rotated `bridge.log`, and it stops on SIGTERM/SIGINT through `signal.signal`, which Windows supports too
+- The watcher command in the tool descriptions is quoted with forward slashes, so it runs in the Git Bash that Claude Code uses on Windows
 - A missing config file or key stops every service with a message; the silent defaults (including a hard-coded Bridge IP) are gone
 - Code, log messages, tool descriptions and `install.sh` are in English; `install.sh` writes the PolicyKit rule for the installing user instead of a fixed one, asks clients for the Bridge address and suggests `0.0.0.0` as the Bridge's listen address (`127.0.0.1` locked out every other machine); it ends with the ready `claude mcp add` line
 - `/beratung` renamed to `/consult` and rewritten in English, as are the Claude Code rules and the integration README; tag `[WEITER]` is now `[CONTINUE]`

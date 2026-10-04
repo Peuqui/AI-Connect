@@ -1,4 +1,4 @@
-"""File logging of the MCP clients, rotated by size as set in the config."""
+"""File logging of the Bridge and the MCP clients, rotated by size as set in the config."""
 
 import logging
 from logging.handlers import RotatingFileHandler
