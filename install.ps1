@@ -23,7 +23,9 @@ param(
     [switch]$Status,
     [switch]$Uninstall,
     # Set by Restart-Elevated: keep the elevated window open at the end
-    [switch]$Elevated
+    [switch]$Elevated,
+    # Set by Restart-Elevated: the account the tasks run as, from before elevation
+    [string]$TaskUser
 )
 
 $ErrorActionPreference = 'Stop'
@@ -36,6 +38,12 @@ $BridgeTask = 'AI-Connect Bridge'
 $HttpTask = 'AI-Connect MCP HTTP'
 $FirewallRule = 'AI-Connect Bridge'
 $BridgePort = 9999
+$HttpPort = 9998
+# Fully qualified (MACHINE\user): a bare name such as "mp" is read by the
+# task scheduler as an SDDL abbreviation (MP = an integrity level), not an
+# account. Taken before elevation, so it is the user, not the admin who
+# confirmed UAC.
+if (-not $TaskUser) { $TaskUser = [Security.Principal.WindowsIdentity]::GetCurrent().Name }
 
 function Invoke-Native {
     # Windows PowerShell does not stop on a failing native command by itself
@@ -58,7 +66,8 @@ function Restart-Elevated([string[]]$Switches) {
     # Logon tasks and firewall rules need administrator rights, even for the
     # own user; Windows asks once through UAC, then this script runs again
     Write-Host 'Tasks and firewall need administrator rights; Windows asks for them now...'
-    $Arguments = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`"") + $Switches + @('-Elevated')
+    $Arguments = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`"") + $Switches +
+        @('-Elevated', '-TaskUser', "`"$TaskUser`"")
     Start-Process powershell -Verb RunAs -Wait -ArgumentList $Arguments
     exit
 }
@@ -84,9 +93,9 @@ function Show-Status {
 
 function Install-Task([string]$Name, [string]$Module) {
     $Action = New-ScheduledTaskAction -Execute $PythonW -Argument "-m $Module" -WorkingDirectory $Repo
-    $Trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
+    $Trigger = New-ScheduledTaskTrigger -AtLogOn -User $TaskUser
     # Runs as the user without elevation, although registered from an elevated shell
-    $Principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited
+    $Principal = New-ScheduledTaskPrincipal -UserId $TaskUser -LogonType Interactive -RunLevel Limited
     $Settings = New-ScheduledTaskSettingsSet -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) `
         -ExecutionTimeLimit ([TimeSpan]::Zero) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
     Register-ScheduledTask -TaskName $Name -Action $Action -Trigger $Trigger -Principal $Principal -Settings $Settings -Force | Out-Null
@@ -207,7 +216,14 @@ if ($Mode -eq 'server') {
         Write-Host "  Firewall: port $BridgePort open for private networks" -ForegroundColor Green
     }
 }
-if ($Http) { Install-Task $HttpTask 'client.http_server' }
+if ($Http) {
+    $Listener = Get-NetTCPConnection -LocalPort $HttpPort -State Listen -ErrorAction SilentlyContinue
+    if ($Listener -and -not (Test-Task $HttpTask)) {
+        Write-Host "  Port $HttpPort is taken (process $($Listener[0].OwningProcess)); HTTP task not installed" -ForegroundColor Red
+    } else {
+        Install-Task $HttpTask 'client.http_server'
+    }
+}
 if ($Mode -eq 'client' -and -not $Http) {
     Write-Host '  None needed for a client (Claude Code starts its own MCP client per session)'
 }
