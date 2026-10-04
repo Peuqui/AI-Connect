@@ -4,6 +4,7 @@ Shared by the STDIO client (one per Claude Code session) and the HTTP/SSE
 server; they differ only in the peer name and the transport.
 """
 
+import os
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -18,9 +19,12 @@ from config_loader import load_config
 # The exact command of this installation: same Python (it has websockets),
 # real path. The tool descriptions carry it, so every assistant can start
 # the watcher without knowing where AI-Connect lives.
+# Forward slashes and quotes, so the command also runs in the Git Bash that
+# Claude Code uses on Windows, and with spaces in the path. abspath, not
+# resolve(): resolving follows the venv's symlink to the system Python.
 WATCH_COMMAND = (
-    f"{sys.executable} "
-    f"{Path(__file__).resolve().parent.parent / 'integrations' / 'claude-code' / 'aiconnect_watch.py'}"
+    f'"{Path(os.path.abspath(sys.executable)).as_posix()}" '
+    f'"{(Path(__file__).resolve().parent.parent / "integrations" / "claude-code" / "aiconnect_watch.py").as_posix()}"'
 )
 
 WATCHER_NOTE = f"""Incoming messages do not wake a Claude Code session. Keep the watcher

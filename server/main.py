@@ -5,13 +5,13 @@ import logging
 import signal
 
 from config_loader import load_config
+from log_setup import setup_logging
 
 from .websocket_server import BridgeServer
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s"
-)
+# A file as well as stdout: under systemd stdout goes to the journal, but a
+# Windows task without a console has nowhere else to log
+setup_logging("bridge.log", logging.StreamHandler())
 logger = logging.getLogger(__name__)
 
 
@@ -23,8 +23,14 @@ async def run_server() -> None:
 
     stop_event = asyncio.Event()
     loop = asyncio.get_running_loop()
+
+    def request_stop(*_: object) -> None:
+        loop.call_soon_threadsafe(stop_event.set)
+
+    # signal.signal instead of loop.add_signal_handler: the latter does not
+    # exist on Windows
     for sig in (signal.SIGTERM, signal.SIGINT):
-        loop.add_signal_handler(sig, stop_event.set)
+        signal.signal(sig, request_stop)
 
     await server.start()
     await stop_event.wait()

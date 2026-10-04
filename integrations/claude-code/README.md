@@ -1,32 +1,23 @@
 # AI-Connect Claude Code integration
 
-Extras for Claude Code on top of the AI-Connect MCP server, packaged as a plugin: state hooks and the `/ai-connect:consult` command, plus behaviour rules and the message watcher.
+Extras for Claude Code on top of the AI-Connect MCP server: a plugin with state hooks and the `/ai-connect:consult` command, behaviour rules and the message watcher.
 
 ## Installation
 
-### 1. Install the plugin
+### 1. Install
 
-The AI-Connect repository is a Claude Code plugin marketplace. In the AI-Connect directory, after `./install.sh`:
+`install.sh` (Linux) and `install.cmd` (Windows) do this step through `installer.py claude`; to repeat it alone, e.g. after installing Claude Code later, run `<venv python> installer.py claude` in the AI-Connect directory. It
 
-```bash
-claude plugin marketplace add "$PWD"
-claude plugin install ai-connect@ai-connect
-```
+- registers the **MCP server** (the STDIO client) with `claude mcp add -s user ai-connect`, using this installation's venv: every session joins as `Host:Project`, named after the project Claude Code runs in
+- adds the repository as a local plugin marketplace and installs the **plugin** `ai-connect@ai-connect` (the small directory `plugin/` here). It brings the **state hooks**, which call `peer_set_state` on prompt submit and after each tool (busy), on a permission prompt (waiting) and when a turn ends (idle), so other peers see the state in `peer_list` and `peer_notify_when_idle` can tell them when this session is done, and the **`/ai-connect:consult`** command
 
-The plugin brings:
-
-- the **MCP server** (the STDIO client): every session joins as `Host:Project`, named after the project Claude Code runs in
-- the **state hooks**: they call `peer_set_state` on prompt submit and after each tool (busy), on a permission prompt (waiting) and when a turn ends (idle), so other peers see the state in `peer_list` and `peer_notify_when_idle` can tell them when this session is done
-- the **`/ai-connect:consult`** command
-
-Add the marketplace from the local directory, not from GitHub: the plugin (`plugin/` here) runs this installation's venv, and `git pull` updates it (takes effect in new sessions or after `/reload-plugins`). Tested with Claude Code 2.1.289; older versions such as 2.1.50 reject the manifest, so check `claude --version` first, and make sure no outdated second `claude` (e.g. an old npm install) comes first in `PATH`.
+The MCP server is registered by the installer rather than shipped in the plugin because its Python lives at a different path on Linux and Windows. Tested with Claude Code 2.1.289; older versions such as 2.1.50 reject the plugin manifest, so check `claude --version` first, and make sure no outdated second `claude` (e.g. an old npm install) comes first in `PATH`. `git pull` updates the plugin too (in new sessions or after `/reload-plugins`).
 
 Coming from an earlier setup:
 
-- Remove a `claude mcp add` registration (`claude mcp remove -s user ai-connect`): while it exists, Claude Code suppresses the plugin's server as a duplicate, and the state hooks find no server.
 - Remove old command links in `~/.claude/commands/` (`consult.md`, or `beratung.md` from before the rename); the command is now `/ai-connect:consult`.
-- Rename tool permissions from `mcp__ai-connect__…` to `mcp__plugin_ai-connect_ai-connect__…`.
 - Delete hooks you added by hand for `peer_set_state`; the plugin brings them.
+- Tool permissions are named `mcp__ai-connect__<tool>`.
 
 ### 2. Include the behaviour rules
 

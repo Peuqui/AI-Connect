@@ -1,6 +1,6 @@
 {
   "name": "ai-connect",
-  "description": "Message other AI coding sessions across machines, people and accounts through a self-hosted AI-Connect Bridge: MCP server, state hooks and the /consult command",
+  "description": "State hooks and the /consult command for AI-Connect; the installer registers the MCP server itself",
   "author": {
     "name": "Peuqui",
     "url": "https://github.com/Peuqui"
@@ -14,13 +14,5 @@
     "multi-agent",
     "self-hosted"
   ],
-  "mcpServers": {
-    "ai-connect": {
-      "command": "${CLAUDE_PLUGIN_ROOT}/../../../venv/bin/python",
-      "args": [
-        "${CLAUDE_PLUGIN_ROOT}/../../../client/server.py"
-      ]
-    }
-  },
   "hooks": "./hooks.json"
 }
