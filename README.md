@@ -124,7 +124,18 @@ git clone https://github.com/Peuqui/AI-Connect.git %USERPROFILE%\AI-Connect
 - A downloaded ZIP carries Windows' "mark of the web", and a double-click on `install.cmd` then shows a security warning. Before unpacking: ZIP → Properties → tick "Unblock", or `Unblock-File AI-Connect-<version>-windows.zip` in PowerShell.
 - Updating from a ZIP unpacks into a new folder: run `install.cmd` there again, so the Claude Code registration and the tasks point to the new path. With `git clone`, `git pull` and `install.cmd -Update` are enough.
 - Claude Code's native installer does not add `%USERPROFILE%\.local\bin` to `PATH`; the AI-Connect installer finds `claude.exe` there anyway, but add it to `PATH` for your terminal.
-- Tested on Windows 11 with Claude Code 2.1.289 (client and server); `-Http` and the Microsoft Store Python not yet.
+- Tested on Windows 11 with Claude Code 2.1.289 (client and server); `-Http`, the Microsoft Store Python, reading along and writing as a user not yet.
+
+### Updating from 2.1 to 2.2
+
+2.2 adds two config keys; the update stops with "lacks bridge.observer_token_sha256, bridge.user_token_sha256" until they are there. In `~/.config/ai-connect/config.yaml`, under `bridge:`:
+
+```yaml
+  observer_token_sha256: ""
+  user_token_sha256: ""
+```
+
+Client machines are done with that. On the Bridge machine, run in your own terminal (not through an agent) `venv/bin/python installer.py observer-token` and `venv/bin/python installer.py user-token`, then restart the Bridge (`sudo systemctl restart ai-connect`, on Windows the `AI-Connect Bridge` task). Without the tokens the Bridge works as before; reading along and writing as a user stay off.
 
 ### 3. Claude Code and other MCP clients
 

@@ -124,7 +124,18 @@ git clone https://github.com/Peuqui/AI-Connect.git %USERPROFILE%\AI-Connect
 - Ein heruntergeladenes ZIP trägt das Windows-Merkmal „aus dem Internet“, ein Doppelklick auf `install.cmd` zeigt dann eine Sicherheitswarnung. Vor dem Entpacken: ZIP → Eigenschaften → „Zulassen“ anhaken, oder in PowerShell `Unblock-File AI-Connect-<Version>-windows.zip`.
 - Ein Update per ZIP entpackt in einen neuen Ordner: `install.cmd` dort erneut ausführen, damit Claude-Code-Registrierung und Aufgaben auf den neuen Pfad zeigen. Mit `git clone` genügen `git pull` und `install.cmd -Update`.
 - Der native Claude-Installer trägt `%USERPROFILE%\.local\bin` nicht in den `PATH` ein; der AI-Connect-Installer findet `claude.exe` dort trotzdem, für das Terminal sollte man es aber eintragen.
-- Getestet unter Windows 11 mit Claude Code 2.1.289 (Client und Server); `-Http` und das Python aus dem Microsoft Store noch nicht.
+- Getestet unter Windows 11 mit Claude Code 2.1.289 (Client und Server); `-Http`, das Python aus dem Microsoft Store, Mitlesen und Schreiben als User noch nicht.
+
+### Update von 2.1 auf 2.2
+
+2.2 bringt zwei neue Config-Schlüssel; das Update bricht mit „lacks bridge.observer_token_sha256, bridge.user_token_sha256“ ab, bis sie da sind. In `~/.config/ai-connect/config.yaml` unter `bridge:`:
+
+```yaml
+  observer_token_sha256: ""
+  user_token_sha256: ""
+```
+
+Auf Client-Rechnern ist das alles. Auf dem Bridge-Rechner danach im eigenen Terminal (nicht über einen Agenten) `venv/bin/python installer.py observer-token` und `venv/bin/python installer.py user-token` ausführen und die Bridge neu starten (`sudo systemctl restart ai-connect`, unter Windows die Aufgabe `AI-Connect Bridge`). Ohne die Tokens arbeitet die Bridge wie bisher; Mitlesen und Schreiben als User bleiben aus.
 
 ### 3. Claude Code und andere MCP-Clients
 
