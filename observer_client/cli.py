@@ -19,6 +19,7 @@ import textwrap
 from datetime import datetime, timedelta, timezone
 
 from bridge_time import parse_bridge_timestamp
+from server.user_send import is_user_name
 
 from .connection import ObserverConnection, TokenRefused, UserConnection
 from .tree import build_conversations, preview
@@ -26,6 +27,17 @@ from .tree import build_conversations, preview
 DEFAULT_TREE_HOURS = 24
 DEFAULT_LIVE_HOURS = 1
 DEFAULT_LIMIT = 200
+
+AMBER = "\033[38;5;214m"
+NAME_COLOR = "\033[36m"
+DIM = "\033[2m"
+RESET = "\033[0m"
+# Only into a terminal: piped into a file or grep, escape codes are noise
+COLORED = sys.stdout.isatty()
+
+
+def _paint(text: str, color: str) -> str:
+    return f"{color}{text}{RESET}" if COLORED else text
 
 
 def _local_time(timestamp: str) -> str:
@@ -38,10 +50,12 @@ def _width() -> int:
     return shutil.get_terminal_size().columns
 
 
-def _print_message_line(prefix: str, message: dict, full: bool) -> None:
-    head = f"{prefix}[{_local_time(message['timestamp'])}] {message['from']} -> {message['to']}:"
+def _print_message_line(prefix: str, message: dict, names: list[str], full: bool) -> None:
+    time = f"[{_local_time(message['timestamp'])}]"
+    plain_head = f"{prefix}{time} {' -> '.join(names)}:"
+    head = f"{prefix}{_paint(time, DIM)} {_paint(' -> ', DIM).join(_paint(name, NAME_COLOR) for name in names)}:"
     if not full:
-        print(f"{head} {preview(message['content'], max(_width() - len(head) - 1, 20))}")
+        print(f"{head} {preview(message['content'], max(_width() - len(plain_head) - 1, 20))}")
         return
     print(head)
     indent = " " * (len(prefix) + 2)
@@ -49,13 +63,24 @@ def _print_message_line(prefix: str, message: dict, full: bool) -> None:
         print(textwrap.indent(line, indent))
 
 
+def _short_names(peers: tuple[str, str]) -> dict[str, str]:
+    """Peer names without the host, unless that makes the two alike (Mini:X and Aragon:X).
+
+    User:<name> stays whole: it marks a person, not a host.
+    """
+    short = {peer: peer if is_user_name(peer) else peer.split(":", 1)[-1] for peer in peers}
+    return short if len(set(short.values())) == len(peers) else {peer: peer for peer in peers}
+
+
 def _print_tree(messages: list[dict], online: set[str], full: bool) -> None:
     for conversation in build_conversations(messages):
         names = " <-> ".join(f"{peer} (online)" if peer in online else peer for peer in conversation.peers)
         count = len(conversation.messages)
-        print(f"{names}  [{count} message{'s' if count != 1 else ''}, last {_local_time(conversation.last_timestamp)}]")
+        print(_paint(f"{names}  [{count} message{'s' if count != 1 else ''}, last {_local_time(conversation.last_timestamp)}]", AMBER))
+        # The heading names both; each line shows only its sender
+        short = _short_names(conversation.peers)
         for message in reversed(conversation.messages):
-            _print_message_line("  ", message, full)
+            _print_message_line("  ", message, [short[message["from"]]], full)
         print()
 
 
@@ -78,12 +103,12 @@ async def _live(hours: float, limit: int, full: bool) -> None:
         await bridge.start_observing()
         history = await bridge.history(since, limit)
         for message in history:
-            _print_message_line("", message, full)
-        print("--- live (Ctrl+C ends) ---")
+            _print_message_line("", message, [message["from"], message["to"]], full)
+        print(_paint("--- live (Ctrl+C ends) ---", AMBER))
         shown = {message["id"] for message in history}
         async for event in bridge.events():
             if event["event"] == "message" and event["id"] not in shown:
-                _print_message_line("", event, full)
+                _print_message_line("", event, [event["from"], event["to"]], full)
     sys.exit("The Bridge closed the connection.")
 
 
