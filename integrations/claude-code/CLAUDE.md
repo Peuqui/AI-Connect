@@ -14,7 +14,7 @@ The AI-Connect plugin runs a watcher in the background (hooks at session start a
 
 - When woken by an AI-Connect message, call `peer_read` and react.
 - Never wait for an answer in a loop or with a helper agent: send, end your turn, and the answer wakes you.
-- **Two sessions in the same project directory** share a peer name; the newer one takes over and the older one goes on standby until the newer one leaves, then takes the name back by itself. Both sessions get a message from `Bridge` about it. Close one of them (or set `AI_CONNECT_PEER_NAME`).
+- **Two sessions in the same project directory** share a peer name; the newer one takes over and the older one goes on standby until the newer one leaves, then takes the name back by itself. Both sessions get a message from `Bridge` about it. Close one of them, or start the second with `AI_CONNECT_PEER_SUFFIX` (name `Host:Project-Suffix`).
 
 ## Status line
 

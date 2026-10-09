@@ -29,7 +29,7 @@ WAITING_NOTICE = "{name} is waiting for approval: {detail}"
 TAKEOVER_NOTICE = (
     "Another session with the name {name} was online and has been put on standby; "
     "it takes the name back once this session leaves. Two sessions in the same "
-    "project directory share a name: close one, or set AI_CONNECT_PEER_NAME."
+    "project directory share a name: close one, or start the second with AI_CONNECT_PEER_SUFFIX."
 )
 
 
