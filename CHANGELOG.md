@@ -1,6 +1,8 @@
 # Changelog
 
-## [Unreleased]
+## [2.2.0] - 2026-10-10
+
+Updating from 2.1: add `bridge.observer_token_sha256: ""` and `bridge.user_token_sha256: ""` to the config; on the Bridge machine then run `installer.py observer-token` and `installer.py user-token` and restart the Bridge (README, "Updating from 2.1 to 2.2").
 
 ### Added
 - Reading along: roles per token on the Bridge (`server/roles.py`, one table of which role may send which message types). Besides the peer token (`bridge.token`, unchanged) an observer token that may only read: `observe` (a copy of every message the Bridge stores), `history_all` (all conversations, with a required time window and limit, pages via `before`), `list_peers`, `ping`; it cannot register, send or hold a name. The Bridge knows it only by its SHA-256 (new required key `bridge.observer_token_sha256`, `""` on machines without the Bridge); the token is in `~/.config/ai-connect/observer.token`. `installer.py observer-token` writes both and adds deny rules for the file and for running `observer_client` to `~/.claude/settings.json`; a fresh `--server` install does it by itself. Existing Bridge machines: run it once and restart the Bridge
