@@ -223,7 +223,7 @@ Optionen: `--hours`, `--limit` (vergangene Nachrichten, Standard 200). Im AI-Con
 
 Es braucht das Beobachter-Token, ein zweites Token neben `bridge.token`, das nur lesen darf: Es kann weder senden noch sich anmelden noch einen Namen belegen. Die Bridge kennt es nur als SHA-256 (`bridge.observer_token_sha256`); das Token selbst steht in `~/.config/ai-connect/observer.token`, nicht in der `config.yaml`, die jeder Agent liest. `installer.py observer-token` auf dem Bridge-Rechner schreibt beides und trägt Verbotsregeln in `~/.claude/settings.json` ein, damit Claude-Code-Sitzungen weder die Datei lesen noch `observer_client` aufrufen: Mitlesen ist das Werkzeug des Users, für ihre eigenen Gespräche haben die Agenten `peer_history`. Das schützt vor Versehen, nicht vor einem Agenten, der es darauf anlegt: Die Agenten laufen unter demselben Benutzer. Ein neues Token gilt nach einem Neustart der Bridge.
 
-Andere Programme benutzen dasselbe Paket: `observer_client.connection` (Verbindung, `history`, `peers`, live `observed`) und `observer_client.tree` (Gespräche als Daten).
+Andere Programme benutzen dasselbe Paket: `observer_client.connection` (Verbindung, `history`, `peers`, live `events`) und `observer_client.tree` (Gespräche als Daten). Ein Programm mit eigener Python-Umgebung (Agent-Orc) startet es stattdessen als Prozess, mit der venv von AI-Connect, und spricht JSON-Zeilen: `python -m observer_client.jsonl observe|send` (Format im Docstring des Moduls).
 
 ### Als User an Agenten schreiben
 
@@ -233,7 +233,7 @@ venv/bin/python -m observer_client.cli send --as Peuqui --to Mini:AIfred-Intelli
 
 Die Agenten sehen den Absender `User:Peuqui`. Den Namen übergibt das Werkzeug; das Präfix `User:` setzt die Bridge selbst und verweigert es jedem Peer, also kann sich kein Agent als User ausgeben. Jeder Empfänger bekommt die Nachricht einzeln; `--to "*"` erreicht alle Peers, die online sind. Die Agenten antworten mit `peer_send(to="User:Peuqui")`, das liest du mit `tree` oder `live`. Laut den Verhaltensregeln ([integrations/claude-code/CLAUDE.md](integrations/claude-code/CLAUDE.md)) ist eine Nachricht vom eigenen User eines Agenten eine Anweisung, die eines anderen Users eine Information.
 
-Es braucht das User-Token, ein drittes Token, das nur als User senden darf. Es ist nirgends auf dem Rechner gespeichert: `installer.py user-token` auf dem Bridge-Rechner zeigt es einmal an und schreibt nur seinen SHA-256 in die Config (`bridge.user_token_sha256`). Im eigenen Terminal ausführen, nicht über einen Agenten, und das Token im Passwortmanager ablegen; `send` fragt es jedes Mal ab. Ein neues Token gilt nach einem Neustart der Bridge. Andere Programme (Agent-Orc) benutzen `observer_client.connection.UserConnection`; ein falsches Token wirft `TokenRefused`.
+Es braucht das User-Token, ein drittes Token, das nur als User senden darf. Es ist nirgends auf dem Rechner gespeichert: `installer.py user-token` auf dem Bridge-Rechner zeigt es einmal an und schreibt nur seinen SHA-256 in die Config (`bridge.user_token_sha256`). Im eigenen Terminal ausführen, nicht über einen Agenten, und das Token im Passwortmanager ablegen; `send` fragt es jedes Mal ab. Ein neues Token gilt nach einem Neustart der Bridge. Andere Programme benutzen `observer_client.connection.UserConnection` (ein falsches Token wirft `TokenRefused`) oder `observer_client.jsonl send`, das das Token von stdin liest.
 
 ## Details
 

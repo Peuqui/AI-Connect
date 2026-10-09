@@ -5,11 +5,13 @@ Reading, with the observer token:
     async with ObserverConnection.from_config() as bridge:
         await bridge.start_observing()     # first, so nothing falls between history and live
         history = await bridge.history(since, limit=200)
-        async for message in bridge.observed():
+        async for event in bridge.events():
             ...
 
 Messages are dicts with id, from, to, content, context and timestamp (see
-bridge_time); a live message can also be in the history, compare the ids.
+bridge_time). Live events are {"event": "message", ...message} or, when a
+peer joins or leaves, {"event": "peers", "peers": [...]}; a live message can
+also be in the history, compare the ids.
 
 Writing, with the user token, which the person enters (it is stored nowhere):
 
@@ -57,20 +59,26 @@ async def _connect(uri: str, token: str) -> ClientConnection:
 
 
 async def _answer(connection: ClientConnection, answer_type: str, pending: list[dict]) -> dict:
-    """Read until the answer of a request; live messages in between go to pending."""
+    """Read until the answer of a request; live events in between go to pending."""
     async for raw in connection:
         data = json.loads(raw)
         if data["type"] == answer_type:
             return data
         if data["type"] == "error":
             raise BridgeError(data["error"])
-        if data["type"] == "observed":
-            pending.append(_message(data))
+        event = _live_event(data)
+        if event:
+            pending.append(event)
     raise ConnectionError("The Bridge closed the connection")
 
 
-def _message(observed: dict) -> dict:
-    return {key: value for key, value in observed.items() if key != "type"}
+def _live_event(data: dict) -> dict | None:
+    """A message or peer list the Bridge pushed to observers, as a live event."""
+    if data["type"] == "observed":
+        return {"event": "message", **{key: value for key, value in data.items() if key != "type"}}
+    if data["type"] == "peers_changed":
+        return {"event": "peers", "peers": data["peers"]}
+    return None
 
 
 # final: Python 3.10 has no typing.Self for __aenter__
@@ -82,7 +90,7 @@ class ObserverConnection:
         self._uri = uri
         self._token = token
         self._ws: ClientConnection | None = None
-        # Live messages that arrived while a request waited for its answer
+        # Live events that arrived while a request waited for its answer
         self._pending: list[dict] = []
 
     @classmethod
@@ -134,14 +142,14 @@ class ObserverConnection:
         answer = await self._request({"type": "list_peers"}, "peer_list")
         return answer["peers"]
 
-    async def observed(self) -> AsyncIterator[dict]:
-        """Every message the Bridge stores, as it comes; ends when the connection closes."""
+    async def events(self) -> AsyncIterator[dict]:
+        """Every stored message and peer list change, as it comes; ends when the connection closes."""
         while self._pending:
             yield self._pending.pop(0)
         async for raw in self._connection:
-            data = json.loads(raw)
-            if data["type"] == "observed":
-                yield _message(data)
+            event = _live_event(json.loads(raw))
+            if event:
+                yield event
 
     async def _request(self, payload: dict, answer_type: str) -> dict:
         await self._connection.send(json.dumps(payload))
