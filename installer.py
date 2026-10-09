@@ -34,12 +34,14 @@ PLUGIN = "ai-connect@ai-connect"
 # What `claude mcp remove` says when there is nothing to remove
 NOT_REGISTERED = "No MCP server named"
 CLAUDE_SETTINGS = Path.home() / ".claude" / "settings.json"
-# Agents run as the same user and could read the observer token; these keep
+# Reading all traffic is the user's tool: agents run as the same user and
+# could read the observer token or run the observer program; these keep
 # Claude Code from doing it by accident (not against an agent set on it).
 # In Claude Code rules "/path" is relative to the settings file, "~/path" to home
-OBSERVER_TOKEN_DENY_RULES = [
+OBSERVER_DENY_RULES = [
     f"Read(~/{OBSERVER_TOKEN_PATH.relative_to(Path.home()).as_posix()})",
     f"Bash(*{OBSERVER_TOKEN_PATH.name}*)",
+    "Bash(*observer_client*)",
 ]
 
 
@@ -127,25 +129,25 @@ def create_observer_token() -> None:
     config["bridge"]["observer_token_sha256"] = token_sha256(token)
     _save_config(config)
     print(f"  Observer token written: {OBSERVER_TOKEN_PATH} (restart the Bridge to use it)")
-    _deny_observer_token_to_claude()
+    _deny_observer_to_claude()
 
 
-def _deny_observer_token_to_claude() -> None:
+def _deny_observer_to_claude() -> None:
     if not CLAUDE_SETTINGS.exists():
         print(f"  {CLAUDE_SETTINGS} not found; add these deny rules once Claude Code is installed:")
-        print("    " + ", ".join(OBSERVER_TOKEN_DENY_RULES))
+        print("    " + ", ".join(OBSERVER_DENY_RULES))
         return
     with open(CLAUDE_SETTINGS, encoding="utf-8") as f:
         settings = json.load(f)
     deny = settings.setdefault("permissions", {}).setdefault("deny", [])
-    added = [rule for rule in OBSERVER_TOKEN_DENY_RULES if rule not in deny]
+    added = [rule for rule in OBSERVER_DENY_RULES if rule not in deny]
     if not added:
         return
     deny.extend(added)
     with open(CLAUDE_SETTINGS, "w", encoding="utf-8") as f:
         json.dump(settings, f, indent=2, ensure_ascii=False)
         f.write("\n")
-    print(f"  Claude Code may not read the observer token: {', '.join(added)} in {CLAUDE_SETTINGS}")
+    print(f"  Claude Code may not read the observer token or run observer_client: {', '.join(added)} in {CLAUDE_SETTINGS}")
 
 
 def _find_claude() -> str | None:

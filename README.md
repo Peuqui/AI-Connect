@@ -221,7 +221,7 @@ venv/bin/python -m observer_client.cli live            # the last hour in order,
 
 Options: `--hours`, `--limit` (past messages, default 200). Run it in the AI-Connect directory.
 
-It needs the observer token, a second token next to `bridge.token` that may only read: it cannot send, register or hold a name. The Bridge knows it only by its SHA-256 (`bridge.observer_token_sha256`); the token itself is in `~/.config/ai-connect/observer.token`, not in `config.yaml`, which every agent reads. `installer.py observer-token` on the Bridge machine writes both and adds deny rules to `~/.claude/settings.json`, so Claude Code sessions do not read the file. That guards against accidents, not against an agent set on reading it: agents run as the same user. A new token takes effect when the Bridge restarts.
+It needs the observer token, a second token next to `bridge.token` that may only read: it cannot send, register or hold a name. The Bridge knows it only by its SHA-256 (`bridge.observer_token_sha256`); the token itself is in `~/.config/ai-connect/observer.token`, not in `config.yaml`, which every agent reads. `installer.py observer-token` on the Bridge machine writes both and adds deny rules to `~/.claude/settings.json`, so Claude Code sessions neither read the file nor run `observer_client`: reading all traffic is the user's tool, agents have `peer_history` for their own conversations. That guards against accidents, not against an agent set on reading it: agents run as the same user. A new token takes effect when the Bridge restarts.
 
 Other programs use the same package: `observer_client.connection` (connection, `history`, `peers`, live `observed`) and `observer_client.tree` (conversations as data).
 
