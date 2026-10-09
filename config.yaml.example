@@ -18,6 +18,11 @@ bridge:
   # which every agent reads, but in ~/.config/ai-connect/observer.token.
   # installer.py observer-token writes both; "" on other machines.
   observer_token_sha256: ""
+  # Bridge machine only: SHA-256 of the user token, with which a person
+  # writes to agents as User:<name> (the send command, Agent-Orc). The token
+  # is stored nowhere on this machine: installer.py user-token shows it
+  # once; keep it in your password manager. "" = nobody can send as user.
+  user_token_sha256: ""
 
 peer:
   # Name of this machine's HTTP/SSE server in the network. The STDIO client

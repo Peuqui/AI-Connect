@@ -13,6 +13,7 @@ from .message_store import MessageStore
 from .observers import Observers
 from .peer_registry import Peer, PeerRegistry, utc_now
 from .roles import Roles
+from .user_send import is_user_name, user_sender, valid_recipients
 
 logger = logging.getLogger(__name__)
 
@@ -124,6 +125,9 @@ class BridgeServer:
                     if not name:
                         await self._send_error(websocket, "'register' needs a 'name'")
                         continue
+                    if is_user_name(name):
+                        await self._send_error(websocket, f"'{name}': names starting with User: belong to users")
+                        continue
                     taken = self.registry.get(name) is not None
                     if taken and message.get("standby"):
                         # A replaced session must not push the new one out again
@@ -157,6 +161,10 @@ class BridgeServer:
                     watched = message.get("peer")
                     if not watched:
                         await self._send_error(websocket, "'watch' needs a 'peer'")
+                        continue
+                    if is_user_name(watched):
+                        # Replies to the user are read with the observer token
+                        await self._send_error(websocket, f"'{watched}': names starting with User: belong to users")
                         continue
                     session = message.get("session")
                     if session and session in self._watcher_sessions.values():
@@ -205,10 +213,31 @@ class BridgeServer:
                     history = await self.store.history_all(since, message.get("before"), limit)
                     await websocket.send(json.dumps({"type": "history_all", "messages": history}))
 
+                elif msg_type == "user_send":
+                    sender = user_sender(message.get("as"))
+                    recipients = valid_recipients(message.get("to"))
+                    if sender is None or recipients is None:
+                        await self._send_error(
+                            websocket,
+                            "'user_send' needs 'as' (letters, digits, . _ -) and 'to' (a list of peer names or \"*\")",
+                        )
+                        continue
+                    sent = []
+                    for recipient in recipients:
+                        stored, online = await self._route_message(
+                            {"to": recipient, "content": message.get("content", "")}, sender
+                        )
+                        sent.append({"to": recipient, "id": stored["id"], "online": online})
+                    await websocket.send(json.dumps({"type": "user_sent", "sent": sent}))
+                    logger.info(f"{sender} sent to {', '.join(recipients)} ({client_ip})")
+
                 elif peer_name is None:
                     await self._send_error(websocket, f"'{msg_type}' needs 'register' first")
 
                 elif msg_type == "message":
+                    if not message.get("to"):
+                        await self._send_error(websocket, "'message' needs a 'to'")
+                        continue
                     await self._route_message(message, peer_name)
 
                 elif msg_type == "set_state":
@@ -278,17 +307,18 @@ class BridgeServer:
             return
         self._idle_subscribers.setdefault(watched, set()).add(subscriber)
 
-    async def _route_message(self, message: dict, from_peer: str) -> None:
+    async def _route_message(self, message: dict, from_peer: str) -> tuple[dict, bool]:
         """Deliver a message; direct messages to offline peers wait in the store.
 
         A broadcast ("*") reaches the peers online right now. Waiting for
         offline peers would need delivery tracking per recipient, and a
-        broadcast is about the present ("is anyone using GPU 2?").
+        broadcast is about the present ("is anyone using GPU 2?"). A message
+        to a user counts as delivered at once: users read along as
+        observers and never register, so it must not pile up as unread.
+
+        Returns the stored message and whether a recipient was online.
         """
-        to_peer = message.get("to")
-        if not to_peer:
-            logger.warning(f"Message from {from_peer} without recipient dropped")
-            return
+        to_peer = message["to"]
 
         if to_peer == "*":
             recipients = [p for p in self.registry.all() if p.name != from_peer]
@@ -301,13 +331,13 @@ class BridgeServer:
             to_peer,
             message.get("content", ""),
             message.get("context"),
-            delivered=to_peer == "*" or bool(recipients)
+            delivered=to_peer == "*" or bool(recipients) or is_user_name(to_peer)
         )
-        outgoing["type"] = "message"
-        payload = json.dumps(outgoing)
+        payload = json.dumps({**outgoing, "type": "message"})
         for peer in recipients:
             await self._send_to(peer, payload)
         await self._notify_watchers(to_peer, from_peer, payload)
+        return outgoing, bool(recipients)
 
     async def _notify_watchers(self, to_peer: str, from_peer: str, payload: str) -> None:
         """Tell the watchers of every recipient that a message arrived."""

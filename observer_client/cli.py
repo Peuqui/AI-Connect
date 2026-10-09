@@ -1,15 +1,18 @@
-"""Read along with the AI-Connect Bridge in the terminal.
+"""Read along with the AI-Connect Bridge in the terminal, and write to agents as a user.
 
     venv/bin/python -m observer_client.cli tree          # conversations of the last 24 h
     venv/bin/python -m observer_client.cli tree --full   # with the full text of every message
     venv/bin/python -m observer_client.cli live          # the last hour, then every new message
+    venv/bin/python -m observer_client.cli send --as Peuqui --to Mini:A --to Mini:B "text"
 
-Run it in the AI-Connect directory; it needs the observer token
-(installer.py observer-token on the Bridge machine).
+Run it in the AI-Connect directory. Reading needs the observer token
+(installer.py observer-token on the Bridge machine); send asks for the
+user token (installer.py user-token).
 """
 
 import argparse
 import asyncio
+import getpass
 import shutil
 import sys
 import textwrap
@@ -17,7 +20,7 @@ from datetime import datetime, timedelta, timezone
 
 from bridge_time import parse_bridge_timestamp
 
-from .connection import ObserverConnection
+from .connection import ObserverConnection, TokenRefused, UserConnection
 from .tree import build_conversations, preview
 
 DEFAULT_TREE_HOURS = 24
@@ -84,9 +87,25 @@ async def _live(hours: float, limit: int, full: bool) -> None:
     sys.exit("The Bridge closed the connection.")
 
 
+async def _send(as_name: str, recipients: list[str], text: str) -> None:
+    # Asked every time: the user token is stored nowhere an agent could read it
+    token = getpass.getpass("User token: ")
+    try:
+        sent = await UserConnection.from_config(token).send(as_name, recipients, text)
+    except TokenRefused:
+        sys.exit("The Bridge refused the user token.")
+    for recipient in sent:
+        state = "delivered" if recipient["online"] else "waits until it is online"
+        print(f"User:{as_name} -> {recipient['to']}: {state}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     views = parser.add_subparsers(dest="view", required=True)
+    send = views.add_parser("send", help="write to one or more peers as User:<name> (asks for the user token)")
+    send.add_argument("--as", dest="as_name", required=True, help="your name; the peers see User:<name>")
+    send.add_argument("--to", action="append", required=True, help="a peer name or *, repeat for several")
+    send.add_argument("text")
     tree = views.add_parser("tree", help="conversations, the latest active first")
     tree.add_argument("--hours", type=float, default=DEFAULT_TREE_HOURS, help=f"how far back (default {DEFAULT_TREE_HOURS})")
     live = views.add_parser("live", help="every message in order, then the new ones as they come")
@@ -96,9 +115,12 @@ def main() -> None:
         view.add_argument("--full", action="store_true", help="the full text instead of the first line")
     args = parser.parse_args()
 
-    run = _tree if args.view == "tree" else _live
+    if args.view == "send":
+        run = _send(args.as_name, args.to, args.text)
+    else:
+        run = (_tree if args.view == "tree" else _live)(args.hours, args.limit, args.full)
     try:
-        asyncio.run(run(args.hours, args.limit, args.full))
+        asyncio.run(run)
     except KeyboardInterrupt:
         pass
 
