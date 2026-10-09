@@ -6,6 +6,7 @@ with the venv's Python, so it is written once for both:
 
     installer.py config --server   # Bridge machine: write the config, generate the token
     installer.py config --client   # every other machine: write the config, ask for the token
+    installer.py observer-token    # Bridge machine: (re)generate the observer token
     installer.py claude            # register the MCP server and the plugin with Claude Code
     installer.py unregister        # remove both from Claude Code again
 """
@@ -22,7 +23,8 @@ from pathlib import Path
 
 import yaml
 
-from config_loader import CONFIG_PATH
+from config_loader import CONFIG_PATH, OBSERVER_TOKEN_PATH
+from server.roles import token_sha256
 
 REPO = Path(__file__).resolve().parent
 CONFIG_EXAMPLE = REPO / "config.yaml.example"
@@ -31,6 +33,14 @@ MARKETPLACE = "ai-connect"
 PLUGIN = "ai-connect@ai-connect"
 # What `claude mcp remove` says when there is nothing to remove
 NOT_REGISTERED = "No MCP server named"
+CLAUDE_SETTINGS = Path.home() / ".claude" / "settings.json"
+# Agents run as the same user and could read the observer token; these keep
+# Claude Code from doing it by accident (not against an agent set on it).
+# In Claude Code rules "/path" is relative to the settings file, "~/path" to home
+OBSERVER_TOKEN_DENY_RULES = [
+    f"Read(~/{OBSERVER_TOKEN_PATH.relative_to(Path.home()).as_posix()})",
+    f"Bash(*{OBSERVER_TOKEN_PATH.name}*)",
+]
 
 
 def _dotted_keys(tree: dict, prefix: str = "") -> set[str]:
@@ -89,11 +99,53 @@ def write_config(server: bool) -> None:
         config["bridge"]["token"] = _ask("Bridge token (bridge.token in the Bridge machine's config)")
 
     CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    _save_config(config)
+    print(f"  Config written: {CONFIG_PATH}")
+    if server:
+        create_observer_token()
+
+
+def _save_config(config: dict) -> None:
     with open(CONFIG_PATH, "w", encoding="utf-8") as f:
         yaml.safe_dump(config, f, sort_keys=False)
     # The token is a secret; on Windows this only clears the read-only flag
     CONFIG_PATH.chmod(0o600)
-    print(f"  Config written: {CONFIG_PATH}")
+
+
+def create_observer_token() -> None:
+    """Write a new observer token, its hash into the config, and deny agents reading it.
+
+    The Bridge only learns the hash; the token stays in its own file for the
+    tools that read all traffic. A new token locks out the old one once the
+    Bridge restarts.
+    """
+    token = secrets.token_hex(32)
+    OBSERVER_TOKEN_PATH.write_text(token + "\n", encoding="utf-8")
+    OBSERVER_TOKEN_PATH.chmod(0o600)
+    with open(CONFIG_PATH, encoding="utf-8") as f:
+        config = yaml.safe_load(f)
+    config["bridge"]["observer_token_sha256"] = token_sha256(token)
+    _save_config(config)
+    print(f"  Observer token written: {OBSERVER_TOKEN_PATH} (restart the Bridge to use it)")
+    _deny_observer_token_to_claude()
+
+
+def _deny_observer_token_to_claude() -> None:
+    if not CLAUDE_SETTINGS.exists():
+        print(f"  {CLAUDE_SETTINGS} not found; add these deny rules once Claude Code is installed:")
+        print("    " + ", ".join(OBSERVER_TOKEN_DENY_RULES))
+        return
+    with open(CLAUDE_SETTINGS, encoding="utf-8") as f:
+        settings = json.load(f)
+    deny = settings.setdefault("permissions", {}).setdefault("deny", [])
+    added = [rule for rule in OBSERVER_TOKEN_DENY_RULES if rule not in deny]
+    if not added:
+        return
+    deny.extend(added)
+    with open(CLAUDE_SETTINGS, "w", encoding="utf-8") as f:
+        json.dump(settings, f, indent=2, ensure_ascii=False)
+        f.write("\n")
+    print(f"  Claude Code may not read the observer token: {', '.join(added)} in {CLAUDE_SETTINGS}")
 
 
 def _find_claude() -> str | None:
@@ -181,12 +233,15 @@ def main() -> None:
     mode = config.add_mutually_exclusive_group(required=True)
     mode.add_argument("--server", action="store_true", help="Bridge machine: generate the token")
     mode.add_argument("--client", action="store_true", help="other machines: ask for the token")
+    steps.add_parser("observer-token", help="Bridge machine: generate the token for reading all traffic")
     steps.add_parser("claude", help="register the MCP server and the plugin with Claude Code")
     steps.add_parser("unregister", help="remove the MCP server and the plugin from Claude Code")
     args = parser.parse_args()
 
     if args.step == "config":
         write_config(server=args.server)
+    elif args.step == "observer-token":
+        create_observer_token()
     elif args.step == "claude":
         register_claude()
     else:

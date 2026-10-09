@@ -22,7 +22,6 @@ import asyncio
 import json
 import os
 import sys
-from datetime import datetime
 from pathlib import Path
 
 # config_loader lives in the repository root
@@ -30,6 +29,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import websockets
 
+from bridge_time import parse_bridge_timestamp
 from config_loader import bridge_target, load_config
 from peer_name import process_alive, record_seen, seen_since, session_name
 
@@ -81,8 +81,7 @@ async def watch(session: str) -> None:
                         sys.exit(f"aiconnect_watch.py: Bridge refused: {data.get('error')}")
                     if data.get("type") == "message":
                         record_seen(session, data["timestamp"])
-                        received = datetime.fromisoformat(data["timestamp"].replace("Z", "+00:00"))
-                        local = received.astimezone().strftime("%H:%M:%S")
+                        local = parse_bridge_timestamp(data["timestamp"]).astimezone().strftime("%H:%M:%S")
                         print(
                             f"AI-Connect message for {peer} [{local}] from {data['from']}: {data['content']}\n"
                             "Call peer_read for all new messages, then react."

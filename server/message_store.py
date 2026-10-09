@@ -1,11 +1,30 @@
 """SQLite message store of the Bridge: history and offline delivery."""
 
 import json
+import sqlite3
 import uuid
+from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import aiosqlite
+
+from bridge_time import bridge_timestamp
+
+StoredCallback = Callable[[dict], Awaitable[None]]
+
+_COLUMNS = "id, from_peer, to_peer, content, context, timestamp"
+
+
+def _row_to_message(row: sqlite3.Row) -> dict:
+    return {
+        "id": row[0],
+        "from": row[1],
+        "to": row[2],
+        "content": row[3],
+        "context": json.loads(row[4]) if row[4] else None,
+        "timestamp": row[5]
+    }
 
 
 class MessageStore:
@@ -15,6 +34,11 @@ class MessageStore:
         self.db_path = Path(db_path).expanduser()
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._db: aiosqlite.Connection | None = None
+        self._on_stored: StoredCallback | None = None
+
+    def on_stored(self, callback: StoredCallback) -> None:
+        """Call back with every message once it is stored (the observers' feed)."""
+        self._on_stored = callback
 
     async def connect(self) -> None:
         """Open the database and create the table."""
@@ -57,9 +81,7 @@ class MessageStore:
     ) -> dict:
         """Store a message and return it as sent to peers."""
         msg_id = str(uuid.uuid4())
-        # ISO with milliseconds, e.g. 2026-01-03T14:30:45.123Z; the watcher
-        # compares these strings, so the format must stay fixed.
-        timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+        timestamp = bridge_timestamp(datetime.now(timezone.utc))
         context_json = json.dumps(context) if context else None
 
         await self._conn.execute(
@@ -70,7 +92,7 @@ class MessageStore:
             (msg_id, from_peer, to_peer, content, context_json, timestamp, int(delivered))
         )
         await self._conn.commit()
-        return {
+        message = {
             "id": msg_id,
             "from": from_peer,
             "to": to_peer,
@@ -78,32 +100,22 @@ class MessageStore:
             "context": context,
             "timestamp": timestamp
         }
+        if self._on_stored:
+            await self._on_stored(message)
+        return message
 
     async def get_unread(self, peer: str) -> list[dict]:
         """Direct messages to this peer that have not been delivered yet."""
         cursor = await self._conn.execute(
-            """
-            SELECT id, from_peer, to_peer, content, context, timestamp
+            f"""
+            SELECT {_COLUMNS}
             FROM messages
             WHERE to_peer = ? AND delivered = 0
             ORDER BY timestamp ASC
             """,
             (peer,)
         )
-        rows = await cursor.fetchall()
-
-        messages = []
-        for row in rows:
-            messages.append({
-                "id": row[0],
-                "from": row[1],
-                "to": row[2],
-                "content": row[3],
-                "context": json.loads(row[4]) if row[4] else None,
-                "timestamp": row[5]
-            })
-
-        return messages
+        return [_row_to_message(row) for row in await cursor.fetchall()]
 
     async def mark_delivered(self, message_ids: list[str]) -> None:
         """Mark messages as delivered."""
@@ -130,8 +142,8 @@ class MessageStore:
     async def latest_to_since(self, peer: str, since: str) -> dict | None:
         """The newest message to peer (or to everyone, from someone else) after since."""
         cursor = await self._conn.execute(
-            """
-            SELECT id, from_peer, to_peer, content, context, timestamp
+            f"""
+            SELECT {_COLUMNS}
             FROM messages
             WHERE (to_peer = ? OR (to_peer = '*' AND from_peer != ?)) AND timestamp > ?
             ORDER BY timestamp DESC
@@ -140,16 +152,7 @@ class MessageStore:
             (peer, peer, since)
         )
         row = await cursor.fetchone()
-        if row is None:
-            return None
-        return {
-            "id": row[0],
-            "from": row[1],
-            "to": row[2],
-            "content": row[3],
-            "context": json.loads(row[4]) if row[4] else None,
-            "timestamp": row[5]
-        }
+        return _row_to_message(row) if row else None
 
     async def get_history(
         self,
@@ -159,9 +162,9 @@ class MessageStore:
     ) -> list[dict]:
         """The latest messages between two peers, oldest first."""
         cursor = await self._conn.execute(
-            """
+            f"""
             SELECT * FROM (
-                SELECT id, from_peer, to_peer, content, context, timestamp
+                SELECT {_COLUMNS}
                 FROM messages
                 WHERE (from_peer = ? AND to_peer = ?)
                    OR (from_peer = ? AND to_peer = ?)
@@ -172,17 +175,25 @@ class MessageStore:
             """,
             (peer1, peer2, peer2, peer1, limit)
         )
-        rows = await cursor.fetchall()
+        return [_row_to_message(row) for row in await cursor.fetchall()]
 
-        messages = []
-        for row in rows:
-            messages.append({
-                "id": row[0],
-                "from": row[1],
-                "to": row[2],
-                "content": row[3],
-                "context": json.loads(row[4]) if row[4] else None,
-                "timestamp": row[5]
-            })
+    async def history_all(self, since: str, before: str | None, limit: int) -> list[dict]:
+        """The latest messages between any peers after since, oldest first.
 
-        return messages
+        before (exclusive) pages further back: pass the timestamp of the
+        oldest message of the previous page.
+        """
+        cursor = await self._conn.execute(
+            f"""
+            SELECT * FROM (
+                SELECT {_COLUMNS}
+                FROM messages
+                WHERE timestamp > ? AND (? IS NULL OR timestamp < ?)
+                ORDER BY timestamp DESC
+                LIMIT ?
+            )
+            ORDER BY timestamp
+            """,
+            (since, before, before, limit)
+        )
+        return [_row_to_message(row) for row in await cursor.fetchall()]

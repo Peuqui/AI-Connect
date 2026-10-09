@@ -7,6 +7,7 @@ import signal
 from config_loader import load_config
 from log_setup import setup_logging
 
+from .roles import Roles
 from .websocket_server import BridgeServer
 
 # A file as well as stdout: under systemd stdout goes to the journal, but a
@@ -18,7 +19,10 @@ logger = logging.getLogger(__name__)
 async def run_server() -> None:
     bridge = load_config()["bridge"]
     server = BridgeServer(
-        host=bridge["host"], port=bridge["port"], history_days=bridge["history_days"], token=bridge["token"]
+        host=bridge["host"],
+        port=bridge["port"],
+        history_days=bridge["history_days"],
+        roles=Roles(peer_token=bridge["token"], observer_token_sha256=bridge["observer_token_sha256"]),
     )
 
     stop_event = asyncio.Event()
