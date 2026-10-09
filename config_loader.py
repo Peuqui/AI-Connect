@@ -6,8 +6,9 @@ import yaml
 
 CONFIG_PATH = Path.home() / ".config" / "ai-connect" / "config.yaml"
 # Kept out of config.yaml, which every agent reads: the Claude Code settings
-# deny reading this file (see installer.py observer-token)
+# deny reading these files (see installer.py observer-token, user-token)
 OBSERVER_TOKEN_PATH = CONFIG_PATH.parent / "observer.token"
+USER_TOKEN_PATH = CONFIG_PATH.parent / "user.token"
 
 
 def load_config() -> dict:

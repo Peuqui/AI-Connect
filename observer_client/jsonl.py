@@ -9,10 +9,10 @@
             last line, exit code 1
 
     venv/bin/python -m observer_client.jsonl send < request.json
-        stdin: {"token": "...", "as": "Peuqui", "to": ["Mini:A"], "content": "..."}
-        (the token never in the arguments, where ps shows it)
+        stdin: {"as": "Peuqui", "to": ["Mini:A"], "content": "..."}
+        (the user token comes from its file, see installer.py user-token)
         stdout: {"sent": [{"to", "id", "online"}, ...]}, exit code 0, or
-        {"error": "token_refused" | "bridge" | "unreachable", "message": ...}, exit code 1
+        {"error": "token_missing" | "token_refused" | "bridge" | "unreachable", "message": ...}, exit code 1
 """
 
 import argparse
@@ -64,7 +64,10 @@ async def _observe(hours: float, limit: int) -> int:
 async def _send() -> int:
     request = json.loads(sys.stdin.read())
     try:
-        sent = await UserConnection.from_config(request["token"]).send(request["as"], request["to"], request["content"])
+        sent = await UserConnection.from_config().send(request["as"], request["to"], request["content"])
+    except FileNotFoundError as e:
+        _emit({"error": "token_missing", "message": str(e)})
+        return 1
     except TokenRefused:
         _emit({"error": "token_refused"})
         return 1
