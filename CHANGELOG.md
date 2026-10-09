@@ -6,10 +6,11 @@
 - Reading along: roles per token on the Bridge (`server/roles.py`, one table of which role may send which message types). Besides the peer token (`bridge.token`, unchanged) an observer token that may only read: `observe` (a copy of every message the Bridge stores), `history_all` (all conversations, with a required time window and limit, pages via `before`), `list_peers`, `ping`; it cannot register, send or hold a name. The Bridge knows it only by its SHA-256 (new required key `bridge.observer_token_sha256`, `""` on machines without the Bridge); the token is in `~/.config/ai-connect/observer.token`. `installer.py observer-token` writes both and adds deny rules for the file and for running `observer_client` to `~/.claude/settings.json`; a fresh `--server` install does it by itself. Existing Bridge machines: run it once and restart the Bridge
 - `observer_client`: connection (`history`, `peers`, live `observed`), conversation tree as data (`tree.py`, a conversation is the sorted pair of its peers) and a terminal program (`python -m observer_client.cli tree|live`)
 
+- Writing to agents as a user: a third role `user` (token known to the Bridge only by `bridge.user_token_sha256`, new required key, `""` = nobody can send as user; the token is stored nowhere, `installer.py user-token` shows it once). `user_send` sends as `User:<as>` to one or more peers or `*`; the tool passes the name, the Bridge sets the prefix and refuses `register` and `watch` with it to peers. Messages to a user count as delivered at once, so they do not pile up as unread. Client: `UserConnection.send` (returns id and online per recipient, `TokenRefused` for a wrong token) and `cli send`. The behaviour rules make a message from the agent's own user an instruction, from any other user information, without a handshake
 - `AI_CONNECT_PEER_SUFFIX`: the STDIO client joins as `Host:Project-Suffix`, so a second session in the same project (e.g. a reviewer started by Agent-Orc) is reachable under its own name instead of pushing the first onto standby. `AI_CONNECT_PEER_NAME` still takes precedence
 
 ### Changed
-- A connection may send only the message types of its role; anything else gets an error instead of being ignored
+- A connection may send only the message types of its role; anything else gets an error instead of being ignored. A `message` without `to` gets an error instead of being dropped with a log line
 - `bridge_time.py`: the Bridge timestamp format in one place (store, MCP tools, watcher, observer)
 
 ## [2.1.0] - 2026-10-04

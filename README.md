@@ -225,6 +225,16 @@ It needs the observer token, a second token next to `bridge.token` that may only
 
 Other programs use the same package: `observer_client.connection` (connection, `history`, `peers`, live `observed`) and `observer_client.tree` (conversations as data).
 
+### Writing to agents as a user
+
+```bash
+venv/bin/python -m observer_client.cli send --as Peuqui --to Mini:AIfred-Intelligence --to Mini:Agent-Orc "Please stop the test and tell me the state"
+```
+
+The agents see the sender `User:Peuqui`. The tool passes the name; the Bridge sets the prefix `User:` itself and refuses it to every peer, so no agent can pose as a user. Each recipient gets the message on its own; `--to "*"` reaches every peer online. Agents answer with `peer_send(to="User:Peuqui")`, which you read with `tree` or `live`. The behaviour rules ([integrations/claude-code/CLAUDE.md](integrations/claude-code/CLAUDE.md)) make a message from an agent's own user an instruction, one from any other user information.
+
+It needs the user token, a third token that may only send as a user. It is stored nowhere on the machine: `installer.py user-token` on the Bridge machine shows it once and writes only its SHA-256 into the config (`bridge.user_token_sha256`). Run it in your own terminal, not through an agent, and keep the token in your password manager; `send` asks for it every time. A new token takes effect when the Bridge restarts. Other programs (Agent-Orc) use `observer_client.connection.UserConnection`; a wrong token raises `TokenRefused`.
+
 ## Details
 
 - **Peer names**: the STDIO client joins as `Host:Project` (hostname and name of the session's project directory). The HTTP/SSE server uses `peer.name` from the config. `AI_CONNECT_PEER_NAME` overrides both.

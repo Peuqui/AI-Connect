@@ -1,4 +1,6 @@
-"""Read-only connection to the Bridge: every message, live and back in time.
+"""Connections to the Bridge for a person: read all traffic, write to agents as a user.
+
+Reading, with the observer token:
 
     async with ObserverConnection.from_config() as bridge:
         await bridge.start_observing()     # first, so nothing falls between history and live
@@ -8,11 +10,19 @@
 
 Messages are dicts with id, from, to, content, context and timestamp (see
 bridge_time); a live message can also be in the history, compare the ids.
+
+Writing, with the user token, which the person enters (it is stored nowhere):
+
+    sent = await UserConnection.from_config(token).send("Peuqui", ["Mini:A", "Mini:B"], "text")
+
+The agents see the sender as User:Peuqui; their replies are read along
+with the observer token.
 """
 
 import json
 from collections.abc import AsyncIterator
 from datetime import datetime
+from http import HTTPStatus
 from types import TracebackType
 from typing import final
 
@@ -25,6 +35,42 @@ from config_loader import OBSERVER_TOKEN_PATH, bridge_target, load_config
 
 class BridgeError(Exception):
     """The Bridge refused a request."""
+
+
+class TokenRefused(Exception):
+    """The Bridge refused the token (unknown, or a new one replaced it)."""
+
+
+def bridge_uri() -> str:
+    """The Bridge's address from config.yaml."""
+    bridge = load_config()["bridge"]
+    return f"ws://{bridge_target(bridge['host'])}:{bridge['port']}"
+
+
+async def _connect(uri: str, token: str) -> ClientConnection:
+    try:
+        return await websockets.connect(uri, additional_headers={"Authorization": f"Bearer {token}"})
+    except websockets.exceptions.InvalidStatus as e:
+        if e.response.status_code == HTTPStatus.UNAUTHORIZED:
+            raise TokenRefused("The Bridge refused the token") from e
+        raise
+
+
+async def _answer(connection: ClientConnection, answer_type: str, pending: list[dict]) -> dict:
+    """Read until the answer of a request; live messages in between go to pending."""
+    async for raw in connection:
+        data = json.loads(raw)
+        if data["type"] == answer_type:
+            return data
+        if data["type"] == "error":
+            raise BridgeError(data["error"])
+        if data["type"] == "observed":
+            pending.append(_message(data))
+    raise ConnectionError("The Bridge closed the connection")
+
+
+def _message(observed: dict) -> dict:
+    return {key: value for key, value in observed.items() if key != "type"}
 
 
 # final: Python 3.10 has no typing.Self for __aenter__
@@ -47,14 +93,10 @@ class ObserverConnection:
                 f"Observer token not found: {OBSERVER_TOKEN_PATH}\n"
                 "Run installer.py observer-token on the Bridge machine."
             )
-        bridge = load_config()["bridge"]
-        uri = f"ws://{bridge_target(bridge['host'])}:{bridge['port']}"
-        return cls(uri, OBSERVER_TOKEN_PATH.read_text(encoding="utf-8").strip())
+        return cls(bridge_uri(), OBSERVER_TOKEN_PATH.read_text(encoding="utf-8").strip())
 
     async def __aenter__(self) -> "ObserverConnection":
-        self._ws = await websockets.connect(
-            self._uri, additional_headers={"Authorization": f"Bearer {self._token}"}
-        )
+        self._ws = await _connect(self._uri, self._token)
         return self
 
     async def __aexit__(
@@ -103,16 +145,33 @@ class ObserverConnection:
 
     async def _request(self, payload: dict, answer_type: str) -> dict:
         await self._connection.send(json.dumps(payload))
-        async for raw in self._connection:
-            data = json.loads(raw)
-            if data["type"] == answer_type:
-                return data
-            if data["type"] == "error":
-                raise BridgeError(data["error"])
-            if data["type"] == "observed":
-                self._pending.append(_message(data))
-        raise ConnectionError("The Bridge closed the connection")
+        return await _answer(self._connection, answer_type, self._pending)
 
 
-def _message(observed: dict) -> dict:
-    return {key: value for key, value in observed.items() if key != "type"}
+@final
+class UserConnection:
+    """Sends as a user with the user token; one connection per send, sending is rare."""
+
+    def __init__(self, uri: str, token: str):
+        self._uri = uri
+        self._token = token
+
+    @classmethod
+    def from_config(cls, token: str) -> "UserConnection":
+        """Bridge address from config.yaml; the token comes from the person."""
+        return cls(bridge_uri(), token)
+
+    async def send(self, as_name: str, recipients: list[str], content: str) -> list[dict]:
+        """Send content to each recipient (a peer name or "*") as User:<as_name>.
+
+        Returns {"to", "id", "online"} per recipient; a peer that is offline
+        gets the message when it comes back, a broadcast reaches only the
+        peers online now.
+        """
+        connection = await _connect(self._uri, self._token)
+        try:
+            await connection.send(json.dumps({"type": "user_send", "as": as_name, "to": recipients, "content": content}))
+            answer = await _answer(connection, "user_sent", [])
+        finally:
+            await connection.close()
+        return answer["sent"]

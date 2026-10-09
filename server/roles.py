@@ -3,7 +3,8 @@
 A connection gets its role from the token it shows in the handshake. The
 peer token is the shared bridge.token; the observer token is only known to
 the Bridge by its SHA-256 (bridge.observer_token_sha256), so the config that
-every agent can read does not give it away.
+every agent can read does not give it away. The same holds for the user
+token (bridge.user_token_sha256), with which a person writes to agents.
 """
 
 import hashlib
@@ -11,6 +12,7 @@ import hmac
 
 PEER = "peer"
 OBSERVER = "observer"
+USER = "user"
 
 # The single truth on what each role may do; anything else is refused
 ALLOWED_MESSAGE_TYPES: dict[str, frozenset[str]] = {
@@ -20,6 +22,8 @@ ALLOWED_MESSAGE_TYPES: dict[str, frozenset[str]] = {
     }),
     # Reads only: no register, so an observer can neither send nor hold a name
     OBSERVER: frozenset({"observe", "history_all", "list_peers", "ping"}),
+    # Sends only; replies and everything else are read with the observer token
+    USER: frozenset({"user_send", "ping"}),
 }
 
 
@@ -30,10 +34,11 @@ def token_sha256(token: str) -> str:
 class Roles:
     """Maps the token of a handshake to its role."""
 
-    def __init__(self, peer_token: str, observer_token_sha256: str):
+    def __init__(self, peer_token: str, observer_token_sha256: str, user_token_sha256: str):
         self._role_by_hash = {
             token_sha256(peer_token): PEER,
             observer_token_sha256: OBSERVER,
+            user_token_sha256: USER,
         }
 
     def role_for(self, authorization: str) -> str | None:

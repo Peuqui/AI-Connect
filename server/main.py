@@ -22,7 +22,11 @@ async def run_server() -> None:
         host=bridge["host"],
         port=bridge["port"],
         history_days=bridge["history_days"],
-        roles=Roles(peer_token=bridge["token"], observer_token_sha256=bridge["observer_token_sha256"]),
+        roles=Roles(
+            peer_token=bridge["token"],
+            observer_token_sha256=bridge["observer_token_sha256"],
+            user_token_sha256=bridge["user_token_sha256"],
+        ),
     )
 
     stop_event = asyncio.Event()

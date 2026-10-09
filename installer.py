@@ -7,6 +7,7 @@ with the venv's Python, so it is written once for both:
     installer.py config --server   # Bridge machine: write the config, generate the token
     installer.py config --client   # every other machine: write the config, ask for the token
     installer.py observer-token    # Bridge machine: (re)generate the observer token
+    installer.py user-token        # Bridge machine: (re)generate the user token, shown once
     installer.py claude            # register the MCP server and the plugin with Claude Code
     installer.py unregister        # remove both from Claude Code again
 """
@@ -132,6 +133,22 @@ def create_observer_token() -> None:
     _deny_observer_to_claude()
 
 
+def create_user_token() -> None:
+    """Show a new user token once and write only its hash into the config.
+
+    The token is stored nowhere, so no agent running as this user can find
+    it; run this in your own terminal, not through an agent, whose
+    transcript would keep the token.
+    """
+    token = secrets.token_hex(32)
+    with open(CONFIG_PATH, encoding="utf-8") as f:
+        config = yaml.safe_load(f)
+    config["bridge"]["user_token_sha256"] = token_sha256(token)
+    _save_config(config)
+    print(f"  User token (shown only now, keep it in your password manager): {token}")
+    print("  Restart the Bridge to use it; the old user token stops working then.")
+
+
 def _deny_observer_to_claude() -> None:
     if not CLAUDE_SETTINGS.exists():
         print(f"  {CLAUDE_SETTINGS} not found; add these deny rules once Claude Code is installed:")
@@ -236,6 +253,7 @@ def main() -> None:
     mode.add_argument("--server", action="store_true", help="Bridge machine: generate the token")
     mode.add_argument("--client", action="store_true", help="other machines: ask for the token")
     steps.add_parser("observer-token", help="Bridge machine: generate the token for reading all traffic")
+    steps.add_parser("user-token", help="Bridge machine: generate the token for writing to agents as a user")
     steps.add_parser("claude", help="register the MCP server and the plugin with Claude Code")
     steps.add_parser("unregister", help="remove the MCP server and the plugin from Claude Code")
     args = parser.parse_args()
@@ -244,6 +262,8 @@ def main() -> None:
         write_config(server=args.server)
     elif args.step == "observer-token":
         create_observer_token()
+    elif args.step == "user-token":
+        create_user_token()
     elif args.step == "claude":
         register_claude()
     else:
