@@ -13,9 +13,9 @@ bridge_time). Live events are {"event": "message", ...message} or, when a
 peer joins or leaves, {"event": "peers", "peers": [...]}; a live message can
 also be in the history, compare the ids.
 
-Writing, with the user token, which the person enters (it is stored nowhere):
+Writing, with the user token:
 
-    sent = await UserConnection.from_config(token).send("Peuqui", ["Mini:A", "Mini:B"], "text")
+    sent = await UserConnection.from_config().send("Peuqui", ["Mini:A", "Mini:B"], "text")
 
 The agents see the sender as User:Peuqui; their replies are read along
 with the observer token.
@@ -25,6 +25,7 @@ import json
 from collections.abc import AsyncIterator
 from datetime import datetime
 from http import HTTPStatus
+from pathlib import Path
 from types import TracebackType
 from typing import final
 
@@ -32,7 +33,12 @@ import websockets
 from websockets import ClientConnection
 
 from bridge_time import bridge_timestamp
-from config_loader import OBSERVER_TOKEN_PATH, bridge_target, load_config
+from config_loader import (
+    OBSERVER_TOKEN_PATH,
+    USER_TOKEN_PATH,
+    bridge_target,
+    load_config,
+)
 
 
 class BridgeError(Exception):
@@ -47,6 +53,12 @@ def bridge_uri() -> str:
     """The Bridge's address from config.yaml."""
     bridge = load_config()["bridge"]
     return f"ws://{bridge_target(bridge['host'])}:{bridge['port']}"
+
+
+def _read_token(path: Path, step: str) -> str:
+    if not path.exists():
+        raise FileNotFoundError(f"Token not found: {path}\nRun installer.py {step} on the Bridge machine.")
+    return path.read_text(encoding="utf-8").strip()
 
 
 async def _connect(uri: str, token: str) -> ClientConnection:
@@ -96,12 +108,7 @@ class ObserverConnection:
     @classmethod
     def from_config(cls) -> "ObserverConnection":
         """Bridge address from config.yaml, token from the observer token file."""
-        if not OBSERVER_TOKEN_PATH.exists():
-            raise FileNotFoundError(
-                f"Observer token not found: {OBSERVER_TOKEN_PATH}\n"
-                "Run installer.py observer-token on the Bridge machine."
-            )
-        return cls(bridge_uri(), OBSERVER_TOKEN_PATH.read_text(encoding="utf-8").strip())
+        return cls(bridge_uri(), _read_token(OBSERVER_TOKEN_PATH, "observer-token"))
 
     async def __aenter__(self) -> "ObserverConnection":
         self._ws = await _connect(self._uri, self._token)
@@ -165,9 +172,9 @@ class UserConnection:
         self._token = token
 
     @classmethod
-    def from_config(cls, token: str) -> "UserConnection":
-        """Bridge address from config.yaml; the token comes from the person."""
-        return cls(bridge_uri(), token)
+    def from_config(cls) -> "UserConnection":
+        """Bridge address from config.yaml, token from the user token file."""
+        return cls(bridge_uri(), _read_token(USER_TOKEN_PATH, "user-token"))
 
     async def send(self, as_name: str, recipients: list[str], content: str) -> list[dict]:
         """Send content to each recipient (a peer name or "*") as User:<as_name>.

@@ -7,7 +7,7 @@ with the venv's Python, so it is written once for both:
     installer.py config --server   # Bridge machine: write the config, generate the token
     installer.py config --client   # every other machine: write the config, ask for the token
     installer.py observer-token    # Bridge machine: (re)generate the observer token
-    installer.py user-token        # Bridge machine: (re)generate the user token, shown once
+    installer.py user-token        # Bridge machine: (re)generate the user token
     installer.py claude            # register the MCP server and the plugin with Claude Code
     installer.py unregister        # remove both from Claude Code again
 """
@@ -24,7 +24,7 @@ from pathlib import Path
 
 import yaml
 
-from config_loader import CONFIG_PATH, OBSERVER_TOKEN_PATH
+from config_loader import CONFIG_PATH, OBSERVER_TOKEN_PATH, USER_TOKEN_PATH
 from server.roles import token_sha256
 
 REPO = Path(__file__).resolve().parent
@@ -35,15 +35,16 @@ PLUGIN = "ai-connect@ai-connect"
 # What `claude mcp remove` says when there is nothing to remove
 NOT_REGISTERED = "No MCP server named"
 CLAUDE_SETTINGS = Path.home() / ".claude" / "settings.json"
-# Reading all traffic is the user's tool: agents run as the same user and
-# could read the observer token or run the observer program; these keep
-# Claude Code from doing it by accident (not against an agent set on it).
+# Reading all traffic and writing as a user are the user's tools: agents run
+# as the same user and could read the token files or run the observer
+# program; these keep Claude Code from doing it by accident (not against an
+# agent set on it).
 # In Claude Code rules "/path" is relative to the settings file, "~/path" to home
-OBSERVER_DENY_RULES = [
-    f"Read(~/{OBSERVER_TOKEN_PATH.relative_to(Path.home()).as_posix()})",
-    f"Bash(*{OBSERVER_TOKEN_PATH.name}*)",
-    "Bash(*observer_client*)",
-]
+TOKEN_DENY_RULES = [
+    rule
+    for path in (OBSERVER_TOKEN_PATH, USER_TOKEN_PATH)
+    for rule in (f"Read(~/{path.relative_to(Path.home()).as_posix()})", f"Bash(*{path.name}*)")
+] + ["Bash(*observer_client*)"]
 
 
 def _dotted_keys(tree: dict, prefix: str = "") -> set[str]:
@@ -105,7 +106,8 @@ def write_config(server: bool) -> None:
     _save_config(config)
     print(f"  Config written: {CONFIG_PATH}")
     if server:
-        create_observer_token()
+        for role in TOKEN_PATHS:
+            create_token(role)
 
 
 def _save_config(config: dict) -> None:
@@ -115,56 +117,45 @@ def _save_config(config: dict) -> None:
     CONFIG_PATH.chmod(0o600)
 
 
-def create_observer_token() -> None:
-    """Write a new observer token, its hash into the config, and deny agents reading it.
+# Role -> token file; the config key of its hash is bridge.<role>_token_sha256
+TOKEN_PATHS = {"observer": OBSERVER_TOKEN_PATH, "user": USER_TOKEN_PATH}
+
+
+def create_token(role: str) -> None:
+    """Write a new token of the role to its file, its hash into the config, and deny agents reading it.
 
     The Bridge only learns the hash; the token stays in its own file for the
-    tools that read all traffic. A new token locks out the old one once the
-    Bridge restarts.
+    person's tools (reading all traffic, writing as a user). A new token
+    locks out the old one once the Bridge restarts.
     """
+    path = TOKEN_PATHS[role]
     token = secrets.token_hex(32)
-    OBSERVER_TOKEN_PATH.write_text(token + "\n", encoding="utf-8")
-    OBSERVER_TOKEN_PATH.chmod(0o600)
+    path.write_text(token + "\n", encoding="utf-8")
+    path.chmod(0o600)
     with open(CONFIG_PATH, encoding="utf-8") as f:
         config = yaml.safe_load(f)
-    config["bridge"]["observer_token_sha256"] = token_sha256(token)
+    config["bridge"][f"{role}_token_sha256"] = token_sha256(token)
     _save_config(config)
-    print(f"  Observer token written: {OBSERVER_TOKEN_PATH} (restart the Bridge to use it)")
-    _deny_observer_to_claude()
+    print(f"  {role.capitalize()} token written: {path} (restart the Bridge to use it)")
+    _deny_tokens_to_claude()
 
 
-def create_user_token() -> None:
-    """Show a new user token once and write only its hash into the config.
-
-    The token is stored nowhere, so no agent running as this user can find
-    it; run this in your own terminal, not through an agent, whose
-    transcript would keep the token.
-    """
-    token = secrets.token_hex(32)
-    with open(CONFIG_PATH, encoding="utf-8") as f:
-        config = yaml.safe_load(f)
-    config["bridge"]["user_token_sha256"] = token_sha256(token)
-    _save_config(config)
-    print(f"  User token (shown only now, keep it in your password manager): {token}")
-    print("  Restart the Bridge to use it; the old user token stops working then.")
-
-
-def _deny_observer_to_claude() -> None:
+def _deny_tokens_to_claude() -> None:
     if not CLAUDE_SETTINGS.exists():
         print(f"  {CLAUDE_SETTINGS} not found; add these deny rules once Claude Code is installed:")
-        print("    " + ", ".join(OBSERVER_DENY_RULES))
+        print("    " + ", ".join(TOKEN_DENY_RULES))
         return
     with open(CLAUDE_SETTINGS, encoding="utf-8") as f:
         settings = json.load(f)
     deny = settings.setdefault("permissions", {}).setdefault("deny", [])
-    added = [rule for rule in OBSERVER_DENY_RULES if rule not in deny]
+    added = [rule for rule in TOKEN_DENY_RULES if rule not in deny]
     if not added:
         return
     deny.extend(added)
     with open(CLAUDE_SETTINGS, "w", encoding="utf-8") as f:
         json.dump(settings, f, indent=2, ensure_ascii=False)
         f.write("\n")
-    print(f"  Claude Code may not read the observer token or run observer_client: {', '.join(added)} in {CLAUDE_SETTINGS}")
+    print(f"  Claude Code may not read the token files or run observer_client: {', '.join(added)} in {CLAUDE_SETTINGS}")
 
 
 def _find_claude() -> str | None:
@@ -260,10 +251,8 @@ def main() -> None:
 
     if args.step == "config":
         write_config(server=args.server)
-    elif args.step == "observer-token":
-        create_observer_token()
-    elif args.step == "user-token":
-        create_user_token()
+    elif args.step in ("observer-token", "user-token"):
+        create_token(args.step.removesuffix("-token"))
     elif args.step == "claude":
         register_claude()
     else:
