@@ -228,7 +228,7 @@ Andere Programme benutzen dasselbe Paket: `observer_client.connection` (Verbindu
 ## Details
 
 - **Peer-Namen**: Der STDIO-Client tritt als `Host:Projekt` bei (Hostname und Name des Projektverzeichnisses der Sitzung). Der HTTP/SSE-Server nimmt `peer.name` aus der Config. `AI_CONNECT_PEER_NAME` überschreibt beides.
-- **Eine Sitzung pro Name**: Tritt eine zweite Sitzung unter einem Namen bei, der schon online ist, übernimmt die neuere; die Bridge teilt der älteren mit, dass sie ersetzt wurde, und diese verbindet sich im Standby neu: Sie sendet und empfängt nichts und holt sich den Namen zurück, sobald die neuere geht. Beide Sitzungen bekommen einen Hinweis von `Bridge`, der auch ihre Wächter weckt. Zwei Claude-Code-Sitzungen im selben Projektverzeichnis teilen sich deshalb einen Namen — eine schließen oder `AI_CONNECT_PEER_NAME` setzen.
+- **Eine Sitzung pro Name**: Tritt eine zweite Sitzung unter einem Namen bei, der schon online ist, übernimmt die neuere; die Bridge teilt der älteren mit, dass sie ersetzt wurde, und diese verbindet sich im Standby neu: Sie sendet und empfängt nichts und holt sich den Namen zurück, sobald die neuere geht. Beide Sitzungen bekommen einen Hinweis von `Bridge`, der auch ihre Wächter weckt. Zwei Claude-Code-Sitzungen im selben Projektverzeichnis teilen sich deshalb einen Namen — eine schließen oder die zweite mit `AI_CONNECT_PEER_SUFFIX` starten (z. B. `Review` ergibt `Mini:Agent-Orc-Review`).
 - **Offline-Nachrichten**: Direktnachrichten an einen Peer, der offline ist, werden auf der Bridge in SQLite gespeichert und zugestellt, sobald er wieder da ist. Rundrufe (`*`) erreichen nur die Peers, die in dem Moment online sind.
 - **Aufbewahrung des Verlaufs**: Die Bridge löscht Nachrichten, die älter als `bridge.history_days` sind (180 in der Vorlage), beim Start und danach täglich.
 - **Logs**: Jeder STDIO-Client schreibt eine eigene Datei, `~/.config/ai-connect/mcp-<Host>_<Projekt>.log`, der HTTP/SSE-Server `mcp-http.log`; beide werden bei `logging.max_megabytes` rotiert, `logging.backup_count` alte Dateien bleiben. Die Bridge schreibt `bridge.log`, ebenso rotiert, und unter systemd zusätzlich ins Journal.
@@ -243,6 +243,7 @@ Andere Programme benutzen dasselbe Paket: `observer_client.connection` (Verbindu
 | Umgebungsvariable | Beschreibung |
 |-------------------|--------------|
 | `AI_CONNECT_PEER_NAME` | Überschreibt den Peer-Namen (`peer.name` beim HTTP/SSE-Server, `Host:Projekt` beim STDIO-Client) |
+| `AI_CONNECT_PEER_SUFFIX` | STDIO-Client: wird mit Bindestrich angehängt, `Host:Projekt-Zusatz`, damit mehrere Sitzungen in einem Projekt jede für sich erreichbar sind. `AI_CONNECT_PEER_NAME` hat Vorrang |
 
 ## Fehlersuche
 
@@ -263,7 +264,7 @@ Unter Windows: `install.cmd -Status`; die Logs liegen in `%USERPROFILE%\.config\
 | Connection refused | Bridge läuft nicht | `sudo systemctl start ai-connect` auf dem Bridge-Rechner |
 | Timeout | Firewall | Port 9999 auf dem Bridge-Rechner öffnen |
 | `peer_status`: Bridge hat den Token abgewiesen | `bridge.token` weicht von dem der Bridge ab | Wert aus der Config des Bridge-Rechners übernehmen, dann den Client neu starten |
-| `peer_status` zeigt Standby | Eine andere Sitzung hat denselben Namen übernommen | Eine schließen oder `AI_CONNECT_PEER_NAME` setzen; die Sitzung im Standby holt sich den Namen zurück, sobald die andere geht |
+| `peer_status` zeigt Standby | Eine andere Sitzung hat denselben Namen übernommen | Eine schließen oder die zweite mit `AI_CONNECT_PEER_SUFFIX` starten; die Sitzung im Standby holt sich den Namen zurück, sobald die andere geht |
 
 ## Einschränkungen
 

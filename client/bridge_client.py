@@ -270,7 +270,7 @@ class BridgeClient:
             self._queue_notice(
                 f"Another session took over the name {self.peer_name}. This session is on standby "
                 "and cannot send or receive until the other one leaves. Two sessions in the same "
-                "project directory share a name: close one, or set AI_CONNECT_PEER_NAME."
+                "project directory share a name: close one, or start the second with AI_CONNECT_PEER_SUFFIX."
             )
 
         elif msg_type == "standby":
