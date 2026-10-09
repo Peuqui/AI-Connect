@@ -182,21 +182,7 @@ class BridgeServer:
                         await websocket.send(json.dumps({**missed, "type": "message"}))
 
                 elif msg_type == "list_peers":
-                    await websocket.send(json.dumps({
-                        "type": "peer_list",
-                        "peers": [
-                            {
-                                "name": p.name,
-                                "ip": p.ip,
-                                "connected_at": p.connected_at,
-                                "state": p.state,
-                                "state_detail": p.state_detail,
-                                "state_since": p.state_since,
-                                "status": p.status,
-                            }
-                            for p in self.registry.all()
-                        ]
-                    }))
+                    await websocket.send(json.dumps({"type": "peer_list", "peers": self._peer_list()}))
 
                 elif msg_type == "observe":
                     self.observers.add(websocket)
@@ -358,11 +344,26 @@ class BridgeServer:
         except websockets.exceptions.ConnectionClosed:
             logger.warning(f"Could not deliver to {peer.name}: connection closed")
 
+    def _peer_list(self) -> list[dict]:
+        return [
+            {
+                "name": p.name,
+                "ip": p.ip,
+                "connected_at": p.connected_at,
+                "state": p.state,
+                "state_detail": p.state_detail,
+                "state_since": p.state_since,
+                "status": p.status,
+            }
+            for p in self.registry.all()
+        ]
+
     async def _announce_joined(self, peer: Peer) -> None:
         payload = json.dumps({"type": "peer_joined", "peer": {"name": peer.name, "ip": peer.ip}})
         for other in self.registry.all():
             if other.name != peer.name:
                 await self._send_to(other, payload)
+        await self.observers.peers_changed(self._peer_list())
 
     async def _handle_left(self, peer: Peer) -> None:
         await self._announce_left(peer)
@@ -372,6 +373,7 @@ class BridgeServer:
         payload = json.dumps({"type": "peer_left", "peer": peer.name})
         for other in self.registry.all():
             await self._send_to(other, payload)
+        await self.observers.peers_changed(self._peer_list())
 
     async def _offer_name(self, name: str) -> None:
         """Tell the standby connections of a name that it is free.

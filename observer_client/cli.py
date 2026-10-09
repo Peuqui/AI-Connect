@@ -81,9 +81,9 @@ async def _live(hours: float, limit: int, full: bool) -> None:
             _print_message_line("", message, full)
         print("--- live (Ctrl+C ends) ---")
         shown = {message["id"] for message in history}
-        async for message in bridge.observed():
-            if message["id"] not in shown:
-                _print_message_line("", message, full)
+        async for event in bridge.events():
+            if event["event"] == "message" and event["id"] not in shown:
+                _print_message_line("", event, full)
     sys.exit("The Bridge closed the connection.")
 
 

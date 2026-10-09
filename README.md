@@ -223,7 +223,7 @@ Options: `--hours`, `--limit` (past messages, default 200). Run it in the AI-Con
 
 It needs the observer token, a second token next to `bridge.token` that may only read: it cannot send, register or hold a name. The Bridge knows it only by its SHA-256 (`bridge.observer_token_sha256`); the token itself is in `~/.config/ai-connect/observer.token`, not in `config.yaml`, which every agent reads. `installer.py observer-token` on the Bridge machine writes both and adds deny rules to `~/.claude/settings.json`, so Claude Code sessions neither read the file nor run `observer_client`: reading all traffic is the user's tool, agents have `peer_history` for their own conversations. That guards against accidents, not against an agent set on reading it: agents run as the same user. A new token takes effect when the Bridge restarts.
 
-Other programs use the same package: `observer_client.connection` (connection, `history`, `peers`, live `observed`) and `observer_client.tree` (conversations as data).
+Other programs use the same package: `observer_client.connection` (connection, `history`, `peers`, live `events`) and `observer_client.tree` (conversations as data). A program with its own Python environment (Agent-Orc) starts it as a process instead, with the AI-Connect venv, and talks JSON lines: `python -m observer_client.jsonl observe|send` (format in the module's docstring).
 
 ### Writing to agents as a user
 
@@ -233,7 +233,7 @@ venv/bin/python -m observer_client.cli send --as Peuqui --to Mini:AIfred-Intelli
 
 The agents see the sender `User:Peuqui`. The tool passes the name; the Bridge sets the prefix `User:` itself and refuses it to every peer, so no agent can pose as a user. Each recipient gets the message on its own; `--to "*"` reaches every peer online. Agents answer with `peer_send(to="User:Peuqui")`, which you read with `tree` or `live`. The behaviour rules ([integrations/claude-code/CLAUDE.md](integrations/claude-code/CLAUDE.md)) make a message from an agent's own user an instruction, one from any other user information.
 
-It needs the user token, a third token that may only send as a user. It is stored nowhere on the machine: `installer.py user-token` on the Bridge machine shows it once and writes only its SHA-256 into the config (`bridge.user_token_sha256`). Run it in your own terminal, not through an agent, and keep the token in your password manager; `send` asks for it every time. A new token takes effect when the Bridge restarts. Other programs (Agent-Orc) use `observer_client.connection.UserConnection`; a wrong token raises `TokenRefused`.
+It needs the user token, a third token that may only send as a user. It is stored nowhere on the machine: `installer.py user-token` on the Bridge machine shows it once and writes only its SHA-256 into the config (`bridge.user_token_sha256`). Run it in your own terminal, not through an agent, and keep the token in your password manager; `send` asks for it every time. A new token takes effect when the Bridge restarts. Other programs use `observer_client.connection.UserConnection` (a wrong token raises `TokenRefused`) or `observer_client.jsonl send`, which reads the token from stdin.
 
 ## Details
 

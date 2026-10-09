@@ -1,4 +1,4 @@
-"""Observers of the Bridge: read-only connections that see every message."""
+"""Observers of the Bridge: read-only connections that see every message and who is online."""
 
 import json
 
@@ -20,7 +20,13 @@ class Observers:
 
     async def broadcast(self, message: dict) -> None:
         """Send a stored message to every observer."""
-        payload = json.dumps({**message, "type": "observed"})
+        await self._send(json.dumps({**message, "type": "observed"}))
+
+    async def peers_changed(self, peers: list[dict]) -> None:
+        """Send the peer list after a peer joined or left."""
+        await self._send(json.dumps({"type": "peers_changed", "peers": peers}))
+
+    async def _send(self, payload: str) -> None:
         for connection in list(self._connections):
             try:
                 await connection.send(payload)
