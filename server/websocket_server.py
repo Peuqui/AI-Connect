@@ -1,7 +1,6 @@
 """WebSocket server of the AI-Connect Bridge: routes messages between peers."""
 
 import asyncio
-import hmac
 import json
 import logging
 from http import HTTPStatus
@@ -11,12 +10,16 @@ from websockets.asyncio.server import Server, ServerConnection
 from websockets.http11 import Request, Response
 
 from .message_store import MessageStore
+from .observers import Observers
 from .peer_registry import Peer, PeerRegistry, utc_now
+from .roles import Roles
 
 logger = logging.getLogger(__name__)
 
 HEARTBEAT_SECONDS = 60
 HISTORY_CLEANUP_SECONDS = 24 * 60 * 60
+# Messages in one history_all page; the contents often carry code and files
+HISTORY_ALL_MAX_LIMIT = 1000
 # Sender of the Bridge's own notices; not of the form Host:Project, so no
 # peer can have it
 BRIDGE_SENDER = "Bridge"
@@ -33,13 +36,14 @@ TAKEOVER_NOTICE = (
 class BridgeServer:
     """Routes messages between peers and keeps them in the message store."""
 
-    def __init__(self, host: str, port: int, history_days: int, token: str):
+    def __init__(self, host: str, port: int, history_days: int, roles: Roles):
         self.host = host
         self.port = port
         self.history_days = history_days
-        self._authorization = f"Bearer {token}".encode()
+        self.roles = roles
         self.registry = PeerRegistry()
         self.store = MessageStore()
+        self.observers = Observers()
         self._server: Server | None = None
         self._heartbeat_task: asyncio.Task | None = None
         self._history_cleanup_task: asyncio.Task | None = None
@@ -58,6 +62,7 @@ class BridgeServer:
 
         self.registry.on_join(self._announce_joined)
         self.registry.on_leave(self._handle_left)
+        self.store.on_stored(self.observers.broadcast)
 
     async def start(self) -> None:
         await self.store.connect()
@@ -77,14 +82,17 @@ class BridgeServer:
             await self._server.wait_closed()
         await self.store.close()
 
+    def _role(self, request: Request) -> str | None:
+        return self.roles.role_for(request.headers.get("Authorization", ""))
+
     def _check_token(self, connection: ServerConnection, request: Request) -> Response | None:
-        """Refuse the handshake unless it carries the Bridge token.
+        """Refuse the handshake unless it carries a known token.
 
         Checked once per connection, so every message type, the watchers
-        and list_peers are covered alike.
+        and list_peers are covered alike; the token's role decides which
+        message types the connection may send.
         """
-        sent = request.headers.get("Authorization", "").encode()
-        if hmac.compare_digest(sent, self._authorization):
+        if self._role(request) is not None:
             return None
         client_ip = connection.remote_address[0] if connection.remote_address else "unknown"
         logger.warning(f"Refused connection with a missing or wrong token from {client_ip}")
@@ -94,6 +102,10 @@ class BridgeServer:
         """Serve one peer connection until it closes."""
         peer_name: str | None = None
         client_ip = websocket.remote_address[0] if websocket.remote_address else "unknown"
+        # The handshake passed _check_token: the request is there and its token known
+        assert websocket.request is not None
+        role = self._role(websocket.request)
+        assert role is not None
 
         try:
             async for raw_message in websocket:
@@ -103,6 +115,9 @@ class BridgeServer:
                     logger.warning(f"Invalid JSON from {client_ip}")
                     continue
                 msg_type = message.get("type")
+                if not self.roles.allows(role, msg_type):
+                    await self._send_error(websocket, f"'{msg_type}' is not allowed for the role {role}")
+                    continue
 
                 if msg_type == "register":
                     name = message.get("name")
@@ -175,6 +190,21 @@ class BridgeServer:
                         ]
                     }))
 
+                elif msg_type == "observe":
+                    self.observers.add(websocket)
+                    await websocket.send(json.dumps({"type": "observing"}))
+                    logger.info(f"Observer connected ({client_ip})")
+
+                elif msg_type == "history_all":
+                    since, limit = message.get("since"), message.get("limit")
+                    if not since or not isinstance(limit, int) or not 0 < limit <= HISTORY_ALL_MAX_LIMIT:
+                        await self._send_error(
+                            websocket, f"'history_all' needs 'since' and a 'limit' of 1 to {HISTORY_ALL_MAX_LIMIT}"
+                        )
+                        continue
+                    history = await self.store.history_all(since, message.get("before"), limit)
+                    await websocket.send(json.dumps({"type": "history_all", "messages": history}))
+
                 elif peer_name is None:
                     await self._send_error(websocket, f"'{msg_type}' needs 'register' first")
 
@@ -216,6 +246,7 @@ class BridgeServer:
             for connections in (*self._watchers.values(), *self._standby.values()):
                 connections.discard(websocket)
             self._watcher_sessions.pop(websocket, None)
+            self.observers.discard(websocket)
             logger.info(f"Connection closed: {peer_name or client_ip}")
             # Only remove the peer if this connection is still the active one;
             # after a takeover the name belongs to the new connection.

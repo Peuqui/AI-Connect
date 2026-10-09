@@ -1,5 +1,15 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- Reading along: roles per token on the Bridge (`server/roles.py`, one table of which role may send which message types). Besides the peer token (`bridge.token`, unchanged) an observer token that may only read: `observe` (a copy of every message the Bridge stores), `history_all` (all conversations, with a required time window and limit, pages via `before`), `list_peers`, `ping`; it cannot register, send or hold a name. The Bridge knows it only by its SHA-256 (new required key `bridge.observer_token_sha256`, `""` on machines without the Bridge); the token is in `~/.config/ai-connect/observer.token`. `installer.py observer-token` writes both and adds deny rules for the file to `~/.claude/settings.json`; a fresh `--server` install does it by itself. Existing Bridge machines: run it once and restart the Bridge
+- `observer_client`: connection (`history`, `peers`, live `observed`), conversation tree as data (`tree.py`, a conversation is the sorted pair of its peers) and a terminal program (`python -m observer_client.cli tree|live`)
+
+### Changed
+- A connection may send only the message types of its role; anything else gets an error instead of being ignored
+- `bridge_time.py`: the Bridge timestamp format in one place (store, MCP tools, watcher, observer)
+
 ## [2.1.0] - 2026-10-04
 
 ### Changed

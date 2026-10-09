@@ -21,6 +21,7 @@ AI-Connect is an MCP server: assistants send each other messages, share code con
 - **Status and state**: every session shows a one-line status and whether it is busy, idle or waiting for an approval; "tell me when that session is done" works across machines
 - **Installers for Linux and Windows**, client and server; downloads on the [Releases](https://github.com/Peuqui/AI-Connect/releases) page
 - **Handshake protocol** (`[LGTM]` / `[CONTINUE]`) so both sides know when a discussion is finished
+- **Reading along**: an observer token lets you follow all traffic, live and back in time, grouped by conversation (`observer_client`, terminal program included)
 
 ## Why this exists
 
@@ -207,6 +208,22 @@ Incoming messages do not wake a Claude Code session by themselves; the watcher d
 - When the Bridge restarts, the watcher reconnects by itself.
 - Claude Code labels the wake-up notice "Stop hook blocking error" (or "SessionStart"); that is how hooks report back, not an error.
 - It never registers as the peer, so it cannot take over the name; it takes the name from the session's own MCP client.
+
+### Reading along
+
+Who talks with whom, live and back in time:
+
+```bash
+venv/bin/python -m observer_client.cli tree            # conversations of the last 24 h, the latest active first
+venv/bin/python -m observer_client.cli tree --full     # with the full text of every message
+venv/bin/python -m observer_client.cli live            # the last hour in order, then every new message
+```
+
+Options: `--hours`, `--limit` (past messages, default 200). Run it in the AI-Connect directory.
+
+It needs the observer token, a second token next to `bridge.token` that may only read: it cannot send, register or hold a name. The Bridge knows it only by its SHA-256 (`bridge.observer_token_sha256`); the token itself is in `~/.config/ai-connect/observer.token`, not in `config.yaml`, which every agent reads. `installer.py observer-token` on the Bridge machine writes both and adds deny rules to `~/.claude/settings.json`, so Claude Code sessions do not read the file. That guards against accidents, not against an agent set on reading it: agents run as the same user. A new token takes effect when the Bridge restarts.
+
+Other programs use the same package: `observer_client.connection` (connection, `history`, `peers`, live `observed`) and `observer_client.tree` (conversations as data).
 
 ## Details
 

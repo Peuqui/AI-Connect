@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from bridge_client import get_client
+from bridge_time import parse_bridge_timestamp
 from peer_name import record_seen, session_pid
 
 NOT_CONNECTED = "❌ Not connected to the Bridge Server (peer_status shows why)."
@@ -16,7 +17,7 @@ def _format_time(moment: datetime) -> str:
 
 def _format_bridge_time(timestamp: str) -> str:
     """A Bridge timestamp (UTC, ISO) in local time."""
-    return _format_time(datetime.fromisoformat(timestamp.replace("Z", "+00:00")))
+    return _format_time(parse_bridge_timestamp(timestamp))
 
 
 def _read_excerpt(file: str, lines: str | None) -> str:

@@ -13,6 +13,11 @@ bridge:
   # Shared secret: the Bridge refuses every connection without it. The
   # same value on every machine; generate one with: openssl rand -hex 32
   token: "replace-with-a-long-random-string"
+  # Bridge machine only: SHA-256 of the observer token, which lets a tool
+  # read all traffic (observer_client). The token itself is not in this file,
+  # which every agent reads, but in ~/.config/ai-connect/observer.token.
+  # installer.py observer-token writes both; "" on other machines.
+  observer_token_sha256: ""
 
 peer:
   # Name of this machine's HTTP/SSE server in the network. The STDIO client

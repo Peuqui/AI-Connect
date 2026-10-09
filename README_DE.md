@@ -21,6 +21,7 @@ AI-Connect ist ein MCP-Server: Assistenten schicken einander Nachrichten, teilen
 - **Status und Zustand**: Jede Sitzung zeigt eine Statuszeile und ob sie arbeitet, fertig ist oder auf eine Freigabe wartet; „sag mir, wenn die Sitzung fertig ist“ funktioniert über Rechnergrenzen
 - **Installer für Linux und Windows**, Client und Server; Downloads auf der Seite [Releases](https://github.com/Peuqui/AI-Connect/releases)
 - **Handshake-Protokoll** (`[LGTM]` / `[CONTINUE]`), damit beide Seiten wissen, wann eine Diskussion abgeschlossen ist
+- **Mitlesen**: Mit einem Beobachter-Token den ganzen Verkehr verfolgen, live und rückwirkend, nach Gesprächen geordnet (`observer_client`, mit Terminalprogramm)
 
 ## Warum es das gibt
 
@@ -207,6 +208,22 @@ Eingehende Nachrichten wecken eine Claude-Code-Sitzung nicht von selbst; das üb
 - Startet die Bridge neu, verbindet sich der Wächter selbst wieder.
 - Claude Code beschriftet den Weckhinweis mit „Stop hook blocking error“ (oder „SessionStart“); so melden sich Hooks zurück, es ist kein Fehler.
 - Er meldet sich nie als der Peer an, kann den Namen also nicht übernehmen; den Namen liest er vom MCP-Client der eigenen Sitzung ab.
+
+### Mitlesen
+
+Wer mit wem redet, live und rückwirkend:
+
+```bash
+venv/bin/python -m observer_client.cli tree            # Gespräche der letzten 24 h, das zuletzt aktive zuerst
+venv/bin/python -m observer_client.cli tree --full     # mit dem vollen Text jeder Nachricht
+venv/bin/python -m observer_client.cli live            # die letzte Stunde der Reihe nach, dann jede neue Nachricht
+```
+
+Optionen: `--hours`, `--limit` (vergangene Nachrichten, Standard 200). Im AI-Connect-Verzeichnis aufrufen.
+
+Es braucht das Beobachter-Token, ein zweites Token neben `bridge.token`, das nur lesen darf: Es kann weder senden noch sich anmelden noch einen Namen belegen. Die Bridge kennt es nur als SHA-256 (`bridge.observer_token_sha256`); das Token selbst steht in `~/.config/ai-connect/observer.token`, nicht in der `config.yaml`, die jeder Agent liest. `installer.py observer-token` auf dem Bridge-Rechner schreibt beides und trägt Verbotsregeln in `~/.claude/settings.json` ein, damit Claude-Code-Sitzungen die Datei nicht lesen. Das schützt vor Versehen, nicht vor einem Agenten, der es darauf anlegt: Die Agenten laufen unter demselben Benutzer. Ein neues Token gilt nach einem Neustart der Bridge.
+
+Andere Programme benutzen dasselbe Paket: `observer_client.connection` (Verbindung, `history`, `peers`, live `observed`) und `observer_client.tree` (Gespräche als Daten).
 
 ## Details
 
