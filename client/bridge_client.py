@@ -110,6 +110,8 @@ class BridgeClient:
     async def disconnect(self, reason: str | None = None) -> None:
         """Close the connection and stop reconnecting; reason is shown by peer_status."""
         self.left_because = reason
+        if reason:
+            logger.info(f"Left the Bridge: {reason}")
         self._connected = False
         self._should_reconnect = False
         for task in (self._reconnect_task, self._receive_task, self._ping_task):
