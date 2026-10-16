@@ -4,10 +4,12 @@ Shared by the STDIO client (one per Claude Code session) and the HTTP/SSE
 server; they differ only in the peer name and the transport.
 """
 
+import logging
 from contextlib import asynccontextmanager
 from typing import Literal
 
 from fastmcp import FastMCP
+from fastmcp.server.middleware import Middleware
 
 import tools
 from bridge_client import get_client, init_client
@@ -19,6 +21,22 @@ WATCHER_NOTE = """In Claude Code the AI-Connect plugin runs a watcher in the bac
 wakes this session when a message arrives; you do not start it. When woken
 by an AI-Connect message, call peer_read and react. Never wait for an answer
 in a loop: send, end your turn, and the answer wakes you."""
+
+
+logger = logging.getLogger(__name__)
+
+
+class LogClientInfo(Middleware):
+    """Log who the connecting MCP client says it is.
+
+    Claude Desktop starts this client twice at once under one name, with the same
+    environment; what each says in the initialize request may tell them apart.
+    """
+
+    async def on_initialize(self, context, call_next):
+        params = context.message.params
+        logger.info(f"Initialize from client {params.clientInfo.model_dump(exclude_none=True)}, capabilities {sorted(params.capabilities.model_fields_set)}")
+        return await call_next(context)
 
 
 def create_app(peer_name: str) -> FastMCP:
@@ -34,6 +52,7 @@ def create_app(peer_name: str) -> FastMCP:
             await client.disconnect()
 
     mcp = FastMCP("AI-Connect", lifespan=lifespan)
+    mcp.add_middleware(LogClientInfo())
 
     @mcp.tool()
     async def peer_list() -> str:
