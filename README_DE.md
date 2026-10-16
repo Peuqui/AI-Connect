@@ -221,6 +221,7 @@ Eingehende Nachrichten wecken eine Claude-Code-Sitzung nicht von selbst; das üb
 - Startet die Bridge neu, verbindet sich der Wächter selbst wieder.
 - Claude Code beschriftet den Weckhinweis mit „Stop hook blocking error“ (oder „SessionStart“); so melden sich Hooks zurück, es ist kein Fehler.
 - Er meldet sich nie als der Peer an, kann den Namen also nicht übernehmen; den Namen liest er vom MCP-Client der eigenen Sitzung ab.
+- Im Code-Tab von Claude Desktop sowie bei `claude -p` und dem Agent SDK wartet Claude Code, bis die Hooks zum Sitzungsstart fertig sind; dort startet der Wächter deshalb nicht beim Sitzungsstart. Die Sitzung im Code-Tab wird stattdessen sofort geweckt („AI-Connect: session started“), auch wenn sie nach einem Neustart von Claude Desktop fortgesetzt wird; der Wächter startet nach diesem ersten Turn. Claude Desktop startet eine Code-Sitzung erst, wenn sie geöffnet wird: bis dahin ist sie nicht online.
 
 ### Mitlesen
 

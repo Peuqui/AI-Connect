@@ -221,6 +221,7 @@ Incoming messages do not wake a Claude Code session by themselves; the watcher d
 - When the Bridge restarts, the watcher reconnects by itself.
 - Claude Code labels the wake-up notice "Stop hook blocking error" (or "SessionStart"); that is how hooks report back, not an error.
 - It never registers as the peer, so it cannot take over the name; it takes the name from the session's own MCP client.
+- In the Code tab of Claude Desktop, and with `claude -p` or the Agent SDK, Claude Code waits for the session-start hooks to finish, so the watcher does not start there at session start. The Code tab's session is woken at once instead ("AI-Connect: session started"), also when it is resumed after Claude Desktop restarted; the watcher starts after that first turn. Claude Desktop starts a Code session only once it is opened: until then it is not online.
 
 ### Reading along
 
