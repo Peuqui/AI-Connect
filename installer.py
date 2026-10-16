@@ -17,7 +17,6 @@ import json
 import os
 import secrets
 import shutil
-import socket
 import subprocess
 import sys
 from pathlib import Path
@@ -25,6 +24,7 @@ from pathlib import Path
 import yaml
 
 from config_loader import CONFIG_PATH, OBSERVER_TOKEN_PATH, USER_TOKEN_PATH
+from peer_name import host_name
 from server.roles import token_sha256
 
 REPO = Path(__file__).resolve().parent
@@ -90,7 +90,7 @@ def write_config(server: bool) -> None:
     config = _example()
     # Name of this machine's HTTP/SSE server; Claude Code sessions name
     # themselves Host:Project
-    config["peer"]["name"] = _ask("Peer name of this machine's HTTP/SSE server", socket.gethostname())
+    config["peer"]["name"] = _ask("Peer name of this machine's HTTP/SSE server", host_name())
     if server:
         # On the Bridge machine bridge.host is both the listen address and,
         # mapped by config_loader.bridge_target, the local clients' target;

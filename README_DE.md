@@ -248,7 +248,7 @@ Es braucht das User-Token, ein drittes Token, das nur als User senden darf. Es l
 
 ## Details
 
-- **Peer-Namen**: Der STDIO-Client tritt als `Host:Projekt` bei (Hostname und Name des Projektverzeichnisses der Sitzung). Der HTTP/SSE-Server nimmt `peer.name` aus der Config. `AI_CONNECT_PEER_NAME` überschreibt beides.
+- **Peer-Namen**: Der STDIO-Client tritt als `Host:Projekt` bei (Hostname und Name des Projektverzeichnisses der Sitzung). In der WSL bekommt der Host ein `-WSL` angehängt (`Aragon-WSL:Projekt`), weil die WSL denselben Hostnamen meldet wie ihr Windows und sich die Sitzungen beider sonst die Namen wegnähmen. Der HTTP/SSE-Server nimmt `peer.name` aus der Config; der Installer schlägt denselben Hostnamen vor. `AI_CONNECT_PEER_NAME` überschreibt beides.
 - **Eine Sitzung pro Name**: Tritt eine zweite Sitzung unter einem Namen bei, der schon online ist, übernimmt die neuere; die Bridge teilt der älteren mit, dass sie ersetzt wurde, und diese verbindet sich im Standby neu: Sie sendet und empfängt nichts und holt sich den Namen zurück, sobald die neuere geht. Beide Sitzungen bekommen einen Hinweis von `Bridge`, der auch ihre Wächter weckt. Zwei Claude-Code-Sitzungen im selben Projektverzeichnis teilen sich deshalb einen Namen — eine schließen oder die zweite mit `AI_CONNECT_PEER_SUFFIX` starten (z. B. `Review` ergibt `Mini:Agent-Orc-Review`).
 - **Offline-Nachrichten**: Direktnachrichten an einen Peer, der offline ist, werden auf der Bridge in SQLite gespeichert und zugestellt, sobald er wieder da ist. Rundrufe (`*`) erreichen nur die Peers, die in dem Moment online sind.
 - **Aufbewahrung des Verlaufs**: Die Bridge löscht Nachrichten, die älter als `bridge.history_days` sind (180 in der Vorlage), beim Start und danach täglich.

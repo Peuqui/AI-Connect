@@ -1,5 +1,12 @@
 # Changelog
 
+## [Unreleased]
+
+Updating inside WSL: sessions now join as `Host-WSL:Project`. Set `peer.name` of the HTTP/SSE server in the WSL's config to the same `Host-WSL` and restart it.
+
+### Changed
+- Inside WSL the host part of the peer names gets `-WSL` appended (`peer_name.host_name`, recognised by WSL's kernel release). WSL reports the same hostname as its Windows, so sessions in a folder of the same name, and the HTTP/SSE servers of both, joined under the same name and pushed each other onto standby. The installer suggests this host name for `peer.name`
+
 ## [2.2.0] - 2026-10-10
 
 Updating from 2.1: add `bridge.observer_token_sha256: ""` and `bridge.user_token_sha256: ""` to the config; on the Bridge machine then run `installer.py observer-token` and `installer.py user-token` and restart the Bridge (README, "Updating from 2.1 to 2.2").
