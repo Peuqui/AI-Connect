@@ -9,7 +9,8 @@ with the venv's Python, so it is written once for both:
     installer.py observer-token    # Bridge machine: (re)generate the observer token
     installer.py user-token        # Bridge machine: (re)generate the user token
     installer.py claude            # register the MCP server and the plugin with Claude Code
-    installer.py unregister        # remove both from Claude Code again
+    installer.py desktop           # register the MCP server with Claude Desktop's chat
+    installer.py unregister        # remove them from Claude Code and Claude Desktop again
 """
 
 import argparse
@@ -34,6 +35,10 @@ MARKETPLACE = "ai-connect"
 PLUGIN = "ai-connect@ai-connect"
 # What `claude mcp remove` says when there is nothing to remove
 NOT_REGISTERED = "No MCP server named"
+# Claude Desktop's file of MCP servers, and the project part of its chat's peer
+# name: all its chats share one client, so one name per machine
+DESKTOP_CONFIG = "claude_desktop_config.json"
+DESKTOP_PROJECT = "Desktop"
 CLAUDE_SETTINGS = Path.home() / ".claude" / "settings.json"
 # Reading all traffic and writing as a user are the user's tools: agents run
 # as the same user and could read the token files or run the observer
@@ -183,6 +188,12 @@ def _check(result: subprocess.CompletedProcess, what: str) -> None:
         sys.exit(f"{what} failed:\n{result.stdout}{result.stderr}")
 
 
+def _client_command() -> tuple[str, str]:
+    """This venv's Python and the STDIO client, as Claude Code and Claude Desktop start it."""
+    # abspath, not resolve(): resolving follows the venv's symlink to the system Python
+    return os.path.abspath(sys.executable), str(REPO / "client" / "server.py")
+
+
 def register_claude() -> None:
     """Register the MCP server (with this venv's Python) and the plugin with Claude Code."""
     claude = _find_claude()
@@ -198,12 +209,8 @@ def register_claude() -> None:
     removed = _claude(claude, "mcp", "remove", "-s", "user", MCP_SERVER)
     if removed.returncode != 0 and NOT_REGISTERED not in removed.stdout + removed.stderr:
         _check(removed, "claude mcp remove")
-    # abspath, not resolve(): resolving follows the venv's symlink to the system Python
-    python = os.path.abspath(sys.executable)
-    _check(
-        _claude(claude, "mcp", "add", "-s", "user", MCP_SERVER, "--", python, str(REPO / "client" / "server.py")),
-        "claude mcp add",
-    )
+    python, server = _client_command()
+    _check(_claude(claude, "mcp", "add", "-s", "user", MCP_SERVER, "--", python, server), "claude mcp add")
     print(f"  MCP server '{MCP_SERVER}' registered: {python}")
 
     marketplaces = {m["name"] for m in json.loads(_claude(claude, "plugin", "marketplace", "list", "--json").stdout)}
@@ -236,6 +243,71 @@ def unregister_claude() -> None:
     print("  AI-Connect removed from Claude Code")
 
 
+def _desktop_config_dirs() -> list[Path]:
+    """The folders where an installed Claude Desktop keeps its config.
+
+    The Store app (MSIX) redirects its Roaming folder into its package, where
+    it alone sees it; the other Windows installer uses Roaming itself. There
+    is no Claude Desktop for Linux.
+    """
+    candidates: list[Path]
+    if sys.platform == "win32":
+        packages = Path(os.environ["LOCALAPPDATA"]) / "Packages"
+        candidates = [*packages.glob("Claude_*/LocalCache/Roaming/Claude"), Path(os.environ["APPDATA"]) / "Claude"]
+    elif sys.platform == "darwin":
+        candidates = [Path.home() / "Library" / "Application Support" / "Claude"]
+    else:
+        candidates = []
+    return [folder for folder in candidates if folder.is_dir()]
+
+
+def _write_desktop_config(path: Path, config: dict) -> None:
+    # The file holds the app's own settings too: keep the previous one
+    if path.exists():
+        shutil.copy2(path, path.with_name(f"{path.name}.bak"))
+    path.write_text(json.dumps(config, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
+def register_desktop() -> None:
+    """Add the STDIO client to Claude Desktop, so its chat joins as Host:Desktop.
+
+    Claude Desktop has no hooks: its chat is not woken by a message and
+    reports no state, it reads its messages when asked to.
+    """
+    folders = _desktop_config_dirs()
+    if not folders:
+        print("  Claude Desktop not found, nothing to register there")
+        return
+    if len(folders) > 1:
+        listed = "\n".join(f"    {folder}" for folder in folders)
+        sys.exit(f"Claude Desktop keeps a config in several folders; which one it uses is unclear:\n{listed}")
+    path = folders[0] / DESKTOP_CONFIG
+    config = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+    python, server = _client_command()
+    name = f"{host_name()}:{DESKTOP_PROJECT}"
+    config.setdefault("mcpServers", {})[MCP_SERVER] = {
+        "command": python,
+        "args": [server],
+        "env": {"AI_CONNECT_PEER_NAME": name},
+    }
+    _write_desktop_config(path, config)
+    print(f"  MCP server '{MCP_SERVER}' registered with Claude Desktop as {name}: {path}")
+    print("  Quit Claude Desktop completely (also in the tray) and start it again to load it")
+
+
+def unregister_desktop() -> None:
+    """Remove the STDIO client from Claude Desktop."""
+    for folder in _desktop_config_dirs():
+        path = folder / DESKTOP_CONFIG
+        if not path.exists():
+            continue
+        config = json.loads(path.read_text(encoding="utf-8"))
+        if MCP_SERVER in config.get("mcpServers", {}):
+            del config["mcpServers"][MCP_SERVER]
+            _write_desktop_config(path, config)
+            print(f"  AI-Connect removed from Claude Desktop: {path}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     steps = parser.add_subparsers(dest="step", required=True)
@@ -246,7 +318,8 @@ def main() -> None:
     steps.add_parser("observer-token", help="Bridge machine: generate the token for reading all traffic")
     steps.add_parser("user-token", help="Bridge machine: generate the token for writing to agents as a user")
     steps.add_parser("claude", help="register the MCP server and the plugin with Claude Code")
-    steps.add_parser("unregister", help="remove the MCP server and the plugin from Claude Code")
+    steps.add_parser("desktop", help="register the MCP server with Claude Desktop's chat")
+    steps.add_parser("unregister", help="remove the MCP server and the plugin from Claude Code and Claude Desktop")
     args = parser.parse_args()
 
     if args.step == "config":
@@ -255,8 +328,11 @@ def main() -> None:
         create_token(args.step.removesuffix("-token"))
     elif args.step == "claude":
         register_claude()
+    elif args.step == "desktop":
+        register_desktop()
     else:
         unregister_claude()
+        unregister_desktop()
 
 
 if __name__ == "__main__":

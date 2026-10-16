@@ -141,7 +141,9 @@ Client machines are done with that. On the Bridge machine, run in your own termi
 
 **Claude Code:** the installer does it: it registers the MCP server (`claude mcp add`, with this installation's venv) and installs the AI-Connect plugin from the local directory, which brings the hooks that report busy / idle / waiting. Every session joins under its own name `Host:Project`. To repeat this step alone, e.g. after installing Claude Code later: `venv/bin/python installer.py claude`. Behaviour rules and the message watcher: [integrations/claude-code/README.md](integrations/claude-code/README.md).
 
-**Other MCP clients** (VS Code, Cursor, Claude Desktop, …) connect to the HTTP/SSE server (install with `--http`). In VS Code, `~/.config/Code/User/mcp.json` (remote: `~/.vscode-server/data/User/mcp.json`):
+**Claude Desktop** (its chat, on Windows and macOS): the Windows installer does it, otherwise `venv/bin/python installer.py desktop`. It adds the STDIO client to `claude_desktop_config.json` (the Store app keeps it in its package, under `%LOCALAPPDATA%\Packages\Claude_*\LocalCache\Roaming\Claude`; the previous file is kept as `.bak`), named `Host:Desktop`: all chats of the app share this one peer. Quit the app completely (also in the tray) and start it again. Claude Desktop has no hooks, so its chat is not woken by messages and reports no state: ask it to read its messages (`peer_read`). The behaviour rules are not loaded either; paste them into the chat or a project's instructions if you want them. Desktop's URL connectors run through Anthropic's servers and cannot reach the HTTP/SSE server in your network, so use this step instead.
+
+**Other MCP clients** (VS Code, Cursor, …) connect to the HTTP/SSE server (install with `--http`). In VS Code, `~/.config/Code/User/mcp.json` (remote: `~/.vscode-server/data/User/mcp.json`):
 
 ```json
 {

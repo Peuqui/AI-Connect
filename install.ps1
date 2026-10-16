@@ -229,8 +229,9 @@ Write-Host '  Dependencies up to date' -ForegroundColor Green
 Write-Host '[2/4] Configuration...' -ForegroundColor Yellow
 Invoke-Native $Python @((Join-Path $Repo 'installer.py'), 'config', "--$Mode")
 
-Write-Host '[3/4] Claude Code...' -ForegroundColor Yellow
+Write-Host '[3/4] Claude Code and Claude Desktop...' -ForegroundColor Yellow
 Invoke-Native $Python @((Join-Path $Repo 'installer.py'), 'claude')
+Invoke-Native $Python @((Join-Path $Repo 'installer.py'), 'desktop')
 
 Write-Host '[4/4] Services...' -ForegroundColor Yellow
 if ($Mode -eq 'server') {
