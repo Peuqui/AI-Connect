@@ -5,7 +5,7 @@
 Updating inside WSL: sessions now join as `Host-WSL:Project`. Set `peer.name` of the HTTP/SSE server in the WSL's config to the same `Host-WSL` and restart it.
 
 ### Added
-- `installer.py desktop`: adds the STDIO client to Claude Desktop's `claude_desktop_config.json` (the Store app's file in its package, the other installer's in Roaming, macOS), so its chat joins as `Host:Desktop`; the previous file is kept as `.bak`. Run by the Windows installer; `unregister` removes it again. Claude Desktop has no hooks: its chat is not woken and reports no state
+- `installer.py desktop`: adds the STDIO client to Claude Desktop's `claude_desktop_config.json` (the Store app's file in its package, the other installer's in Roaming, macOS), so its chat joins as `Host:Desktop`; the previous file is kept as `.bak`. Claude Desktop must not run meanwhile, as it writes its settings into the same file. Run by the Windows installer; `unregister` removes it again. Claude Desktop has no hooks: its chat is not woken and reports no state
 
 ### Changed
 - Inside WSL the host part of the peer names gets `-WSL` appended (`peer_name.host_name`, recognised by WSL's kernel release). WSL reports the same hostname as its Windows, so sessions in a folder of the same name, and the HTTP/SSE servers of both, joined under the same name and pushed each other onto standby. The installer suggests this host name for `peer.name`
