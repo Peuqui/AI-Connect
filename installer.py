@@ -39,6 +39,9 @@ NOT_REGISTERED = "No MCP server named"
 # name: all its chats share one client, so one name per machine
 DESKTOP_CONFIG = "claude_desktop_config.json"
 DESKTOP_PROJECT = "Desktop"
+# Not MCP_SERVER: Claude Desktop passes its servers on to the Code tab's sessions, where the same
+# server name would cover the session's own client (named by its project) with the chat's.
+DESKTOP_MCP_SERVER = "ai-connect-desktop"
 CLAUDE_SETTINGS = Path.home() / ".claude" / "settings.json"
 # Reading all traffic and writing as a user are the user's tools: agents run
 # as the same user and could read the token files or run the observer
@@ -287,13 +290,13 @@ def register_desktop() -> None:
     config = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
     python, server = _client_command()
     name = f"{host_name()}:{DESKTOP_PROJECT}"
-    config.setdefault("mcpServers", {})[MCP_SERVER] = {
+    config.setdefault("mcpServers", {})[DESKTOP_MCP_SERVER] = {
         "command": python,
         "args": [server],
         "env": {"AI_CONNECT_PEER_NAME": name},
     }
     _write_desktop_config(path, config)
-    print(f"  MCP server '{MCP_SERVER}' registered with Claude Desktop as {name}: {path}")
+    print(f"  MCP server '{DESKTOP_MCP_SERVER}' registered with Claude Desktop as {name}: {path}")
     print("  Start Claude Desktop to load it. Was it running? Quit it completely (also in the tray) and run this again")
 
 
@@ -304,8 +307,8 @@ def unregister_desktop() -> None:
         if not path.exists():
             continue
         config = json.loads(path.read_text(encoding="utf-8"))
-        if MCP_SERVER in config.get("mcpServers", {}):
-            del config["mcpServers"][MCP_SERVER]
+        if DESKTOP_MCP_SERVER in config.get("mcpServers", {}):
+            del config["mcpServers"][DESKTOP_MCP_SERVER]
             _write_desktop_config(path, config)
             print(f"  AI-Connect removed from Claude Desktop: {path}")
 
