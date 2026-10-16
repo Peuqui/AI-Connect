@@ -272,7 +272,9 @@ def register_desktop() -> None:
     """Add the STDIO client to Claude Desktop, so its chat joins as Host:Desktop.
 
     Claude Desktop has no hooks: its chat is not woken by a message and
-    reports no state, it reads its messages when asked to.
+    reports no state, it reads its messages when asked to. The app writes its
+    settings into the same file, so it must not run meanwhile: it would write
+    its own copy back without the entry.
     """
     folders = _desktop_config_dirs()
     if not folders:
@@ -292,7 +294,7 @@ def register_desktop() -> None:
     }
     _write_desktop_config(path, config)
     print(f"  MCP server '{MCP_SERVER}' registered with Claude Desktop as {name}: {path}")
-    print("  Quit Claude Desktop completely (also in the tray) and start it again to load it")
+    print("  Start Claude Desktop to load it. Was it running? Quit it completely (also in the tray) and run this again")
 
 
 def unregister_desktop() -> None:
