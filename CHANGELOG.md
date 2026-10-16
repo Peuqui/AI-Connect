@@ -10,6 +10,7 @@ Updating inside WSL: sessions now join as `Host-WSL:Project`. Set `peer.name` of
 ### Changed
 - Inside WSL the host part of the peer names gets `-WSL` appended (`peer_name.host_name`, recognised by WSL's kernel release). WSL reports the same hostname as its Windows, so sessions in a folder of the same name, and the HTTP/SSE servers of both, joined under the same name and pushed each other onto standby. The installer suggests this host name for `peer.name`
 
+- Claude Desktop starts the client twice at once under one name: for its chat (`clientInfo.name` `claude-ai`) and as a copy for its Code and Cowork sessions (`local-agent-mode-<server>`), which took the chat's name and pushed it onto standby. The copy now leaves the Bridge once its initialize request names it, so the chat's client takes the name back within seconds; `peer_status` says why it is not joined
 - A STDIO client logs what the connecting MCP client says about itself in its initialize request (name, version, capabilities), to tell apart the two clients Claude Desktop starts at once under one name
 - Log lines carry the process id, and a STDIO client logs at start its name, its session process and the names (not the values) of its environment variables. Claude Desktop starts the client twice under one name, which then share a log file; this tells them apart
 
