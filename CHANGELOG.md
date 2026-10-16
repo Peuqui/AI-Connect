@@ -13,6 +13,7 @@ Updating inside WSL: sessions now join as `Host-WSL:Project`. Set `peer.name` of
 - Log lines carry the process id, and a STDIO client logs at start its name, its session process and the names (not the values) of its environment variables. Claude Desktop starts the client twice under one name, which then share a log file; this tells them apart
 
 ### Fixed
+- Claude Desktop's entry is named `ai-connect-desktop`, no longer `ai-connect`: the app passes its servers on to the Code tab's sessions, where the chat's client (`Host:Desktop`) covered the session's own `ai-connect` and the session's tools wrote and read as the chat. Remove the old `ai-connect` entry from `claude_desktop_config.json` and run `installer.py desktop` again
 - The README sent Claude Desktop to the HTTP/SSE server; its URL connectors run through Anthropic's servers and cannot reach it
 
 ## [2.2.0] - 2026-10-10
