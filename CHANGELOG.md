@@ -16,6 +16,7 @@ Updating inside WSL: sessions now join as `Host-WSL:Project`. Set `peer.name` of
 
 ### Fixed
 - The watcher no longer holds up the start of a session in Claude Desktop's Code tab, with `claude -p` or the Agent SDK: Claude Code waits for session-start hooks there despite `asyncRewake`. The Code tab's session is woken at once instead, also when resumed after Claude Desktop restarted, and its first turn starts the watcher; `claude -p` and the SDK get no extra turn
+- A watcher started after a session's first turn (the Stop hook) did not report a message that came before it: without a `.seen` file the Bridge has no baseline. The STDIO client now writes one at start (the current time), so such a message wakes the session at once
 - Claude Desktop's entry is named `ai-connect-desktop`, no longer `ai-connect`: the app passes its servers on to the Code tab's sessions, where the chat's client (`Host:Desktop`) covered the session's own `ai-connect` and the session's tools wrote and read as the chat. Remove the old `ai-connect` entry from `claude_desktop_config.json` and run `installer.py desktop` again
 - The README sent Claude Desktop to the HTTP/SSE server; its URL connectors run through Anthropic's servers and cannot reach it
 

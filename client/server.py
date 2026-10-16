@@ -9,6 +9,7 @@ import logging
 import os
 import signal
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 # Started as a plain script by Claude Code: make the client modules and
@@ -16,9 +17,17 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from bridge_time import bridge_timestamp
 from log_setup import setup_logging
 from mcp_app import create_app
-from peer_name import peer_name, record_session_name, remove_dead_sessions, session_pid
+from peer_name import (
+    peer_name,
+    record_seen,
+    record_session_name,
+    remove_dead_sessions,
+    seen_since,
+    session_pid,
+)
 
 logger = logging.getLogger(__name__)
 name = peer_name(os.environ, Path.cwd())
@@ -36,6 +45,9 @@ def main() -> None:
     # apart clients it starts for different purposes under the same name
     logger.info(f"Started as '{name}' by session {pid}, environment: {' '.join(sorted(os.environ))}")
     session_file = record_session_name(pid, name)
+    # Without it a watcher started later (after the first turn) cannot tell what came meanwhile
+    if seen_since(pid) is None:
+        record_seen(pid, bridge_timestamp(datetime.now(timezone.utc)))
     def end(*_: object) -> None:
         # Claude Code ends its MCP servers with SIGTERM, which would skip the
         # finally below. Remove the file, then end as SIGTERM would have.
