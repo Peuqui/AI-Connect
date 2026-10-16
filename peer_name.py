@@ -1,6 +1,7 @@
 """The peer name of a STDIO client: one rule for the client and the watcher."""
 
 import os
+import platform
 import socket
 import sys
 from collections.abc import Mapping
@@ -11,10 +12,26 @@ from pathlib import Path
 # operating system
 SESSIONS_DIR = Path.home() / ".config" / "ai-connect" / "sessions"
 
+# Appended to the host name inside WSL (see host_name)
+WSL_SUFFIX = "-WSL"
+
+
+def host_name() -> str:
+    """This machine's name; inside WSL with WSL_SUFFIX appended.
+
+    WSL reports the same host name as the Windows it runs on, so sessions and
+    HTTP/SSE servers of both would join under the same names and push each
+    other onto standby. WSL's kernel names itself in its release
+    ("...-microsoft-standard-WSL2", WSL 1: "...-Microsoft"), which every
+    process sees, services started by systemd too.
+    """
+    name = socket.gethostname()
+    return f"{name}{WSL_SUFFIX}" if "microsoft" in platform.uname().release.lower() else name
+
 
 def peer_name(environ: Mapping[str, str], cwd: Path) -> str:
     """AI_CONNECT_PEER_NAME if set, else "Host:Project", or "Host:Project-Suffix"
-    with AI_CONNECT_PEER_SUFFIX.
+    with AI_CONNECT_PEER_SUFFIX; Host is host_name().
 
     The project is CLAUDE_PROJECT_DIR when Claude Code sets it for its MCP
     servers, whatever directory it starts them in. Other harnesses start the
@@ -26,7 +43,7 @@ def peer_name(environ: Mapping[str, str], cwd: Path) -> str:
     if "AI_CONNECT_PEER_NAME" in environ:
         return environ["AI_CONNECT_PEER_NAME"]
     project = Path(environ["CLAUDE_PROJECT_DIR"]) if "CLAUDE_PROJECT_DIR" in environ else cwd
-    name = f"{socket.gethostname()}:{project.name}"
+    name = f"{host_name()}:{project.name}"
     suffix = environ.get("AI_CONNECT_PEER_SUFFIX")
     return f"{name}-{suffix}" if suffix else name
 

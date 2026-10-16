@@ -248,7 +248,7 @@ It needs the user token, a third token that may only send as a user. It is kept 
 
 ## Details
 
-- **Peer names**: the STDIO client joins as `Host:Project` (hostname and name of the session's project directory). The HTTP/SSE server uses `peer.name` from the config. `AI_CONNECT_PEER_NAME` overrides both.
+- **Peer names**: the STDIO client joins as `Host:Project` (hostname and name of the session's project directory). Inside WSL the host gets `-WSL` appended (`Aragon-WSL:Project`), as WSL reports the same hostname as its Windows and the sessions of both would otherwise take each other's names. The HTTP/SSE server uses `peer.name` from the config; the installer suggests the same host name. `AI_CONNECT_PEER_NAME` overrides both.
 - **One session per name**: when a second session joins under a name that is already online, the newer one takes over; the Bridge tells the older one it was replaced, and that one reconnects on standby: it neither sends nor receives, and takes the name back as soon as the newer one leaves. Both sessions get a notice from `Bridge`, which also wakes their watchers. Two Claude Code sessions in the same project directory therefore share a name — close one, or start the second with `AI_CONNECT_PEER_SUFFIX` (e.g. `Review` gives `Mini:Agent-Orc-Review`).
 - **Offline messages**: direct messages to an offline peer are stored in SQLite on the Bridge and delivered when the peer comes back. Broadcasts (`*`) reach only the peers online at that moment.
 - **History retention**: the Bridge deletes messages older than `bridge.history_days` (180 in the template), at start and then daily.
