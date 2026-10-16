@@ -26,16 +26,27 @@ in a loop: send, end your turn, and the answer wakes you."""
 logger = logging.getLogger(__name__)
 
 
-class LogClientInfo(Middleware):
-    """Log who the connecting MCP client says it is.
+# What Claude Desktop calls itself, followed by the server's name, when it starts a client for the
+# Code or Cowork sessions: a copy of the chat's client, which a session does not need (it has its
+# own, named by its project) and which must not push the chat off their shared name.
+LOCAL_AGENT_PREFIX = "local-agent-mode-"
+PROXY_NOTE = "this is the copy Claude Desktop starts for its Code sessions; use the 'ai-connect' tools of the session"
 
-    Claude Desktop starts this client twice at once under one name, with the same
-    environment; what each says in the initialize request may tell them apart.
+
+class LeaveForCodeSessions(Middleware):
+    """Log who the connecting MCP client says it is; a Code session's copy leaves the Bridge.
+
+    Claude Desktop starts this client twice at once under one name, with the same environment:
+    for its chat ("claude-ai") and for its Code sessions. Both join before the initialize request
+    names them, so the copy leaves again, which frees the name for the chat's client on standby.
     """
 
     async def on_initialize(self, context, call_next):
         params = context.message.params
+        name = params.clientInfo.name
         logger.info(f"Initialize from client {params.clientInfo.model_dump(exclude_none=True)}, capabilities {sorted(params.capabilities.model_fields_set)}")
+        if name.startswith(LOCAL_AGENT_PREFIX):
+            await get_client().disconnect(PROXY_NOTE)
         return await call_next(context)
 
 
@@ -52,7 +63,7 @@ def create_app(peer_name: str) -> FastMCP:
             await client.disconnect()
 
     mcp = FastMCP("AI-Connect", lifespan=lifespan)
-    mcp.add_middleware(LogClientInfo())
+    mcp.add_middleware(LeaveForCodeSessions())
 
     @mcp.tool()
     async def peer_list() -> str:

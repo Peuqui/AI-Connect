@@ -170,6 +170,8 @@ async def peer_status() -> str:
     bridge = f"{client.host}:{client.port}"
     if client.connected:
         return f"✅ Connected as '{client.peer_name}' to the Bridge Server {bridge}"
+    if client.left_because:
+        return f"➖ Not joined the Bridge Server {bridge}: {client.left_because}"
     if client.token_refused:
         return f"❌ The Bridge Server {bridge} refused the token: check bridge.token in config.yaml"
     if client.standby:

@@ -35,6 +35,8 @@ class BridgeClient:
         # Replaced by another session with the same name: wait until the
         # name is free instead of taking it back
         self._standby = False
+        # Why this client left the Bridge on purpose (see disconnect)
+        self.left_because: str | None = None
         # The Bridge refused the token; retrying cannot help until the
         # config is fixed and the client restarted
         self._token_refused = False
@@ -105,8 +107,9 @@ class BridgeClient:
         logger.info(f"Connected to Bridge at {uri} {state} '{self.peer_name}'")
         return True
 
-    async def disconnect(self) -> None:
-        """Close the connection and stop reconnecting."""
+    async def disconnect(self, reason: str | None = None) -> None:
+        """Close the connection and stop reconnecting; reason is shown by peer_status."""
+        self.left_because = reason
         self._connected = False
         self._should_reconnect = False
         for task in (self._reconnect_task, self._receive_task, self._ping_task):
