@@ -26,6 +26,8 @@ def setup_logging(file_name: str, *extra_handlers: logging.Handler) -> None:
     )
     logging.basicConfig(
         level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(message)s",
+        # The process id tells apart clients a harness starts twice under one
+        # name (Claude Desktop), which then share a file
+        format="%(asctime)s [%(process)d] [%(levelname)s] %(message)s",
         handlers=[file_handler, *extra_handlers],
     )

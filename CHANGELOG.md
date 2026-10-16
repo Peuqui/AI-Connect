@@ -10,6 +10,8 @@ Updating inside WSL: sessions now join as `Host-WSL:Project`. Set `peer.name` of
 ### Changed
 - Inside WSL the host part of the peer names gets `-WSL` appended (`peer_name.host_name`, recognised by WSL's kernel release). WSL reports the same hostname as its Windows, so sessions in a folder of the same name, and the HTTP/SSE servers of both, joined under the same name and pushed each other onto standby. The installer suggests this host name for `peer.name`
 
+- Log lines carry the process id, and a STDIO client logs at start its name, its session process and the names (not the values) of its environment variables. Claude Desktop starts the client twice under one name, which then share a log file; this tells them apart
+
 ### Fixed
 - The README sent Claude Desktop to the HTTP/SSE server; its URL connectors run through Anthropic's servers and cannot reach it
 
