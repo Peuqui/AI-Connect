@@ -5,6 +5,7 @@ the same name, the newer session takes over and the older one waits on
 standby until the name is free.
 """
 
+import logging
 import os
 import signal
 import sys
@@ -19,6 +20,7 @@ from log_setup import setup_logging
 from mcp_app import create_app
 from peer_name import peer_name, record_session_name, remove_dead_sessions, session_pid
 
+logger = logging.getLogger(__name__)
 name = peer_name(os.environ, Path.cwd())
 # STDIO carries the MCP protocol, so logs go to a file only, one per peer:
 # several sessions run at once, and a rotated file must have a single writer
@@ -29,7 +31,11 @@ mcp = create_app(name)
 def main() -> None:
     # The session's watcher finds the name by CLAUDE_PID
     remove_dead_sessions()
-    session_file = record_session_name(session_pid(), name)
+    pid = session_pid()
+    # What the harness passed, names only (values may hold tokens): tells
+    # apart clients it starts for different purposes under the same name
+    logger.info(f"Started as '{name}' by session {pid}, environment: {' '.join(sorted(os.environ))}")
+    session_file = record_session_name(pid, name)
     def end(*_: object) -> None:
         # Claude Code ends its MCP servers with SIGTERM, which would skip the
         # finally below. Remove the file, then end as SIGTERM would have.
