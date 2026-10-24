@@ -302,4 +302,4 @@ Pull Requests sind willkommen, falls jemand einen besseren Ansatz findet.
 
 ## Lizenz
 
-MIT
+[PolyForm Noncommercial 1.0.0](LICENSE): Herunterladen und Nutzen für jeden nichtkommerziellen Zweck frei; kommerzielle Nutzung nur mit Erlaubnis des Autors.

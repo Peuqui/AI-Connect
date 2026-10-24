@@ -308,7 +308,7 @@ Pull requests are welcome if you find a better approach.
 
 ## License
 
-MIT
+[PolyForm Noncommercial 1.0.0](LICENSE): free to download and use for any noncommercial purpose; commercial use needs the author's permission.
 
 ---
 
