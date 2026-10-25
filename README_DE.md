@@ -300,6 +300,12 @@ Unter Windows: `install.cmd -Status`; die Logs liegen in `%USERPROFILE%\.config\
 
 Pull Requests sind willkommen, falls jemand einen besseren Ansatz findet.
 
+## Star History
+
+![Star History](https://raw.githubusercontent.com/Peuqui/Traffic/main/data/AI-Connect/star-history.svg)
+
+<sub>Täglich erhoben in [Peuqui/Traffic](https://github.com/Peuqui/Traffic), zusammen mit Aufrufen und Klonen. GitHub hat die Stargazer-API am 30.06.2026 auf Repo-Admins beschränkt, deshalb brauchen externe Diagramm-Dienste jetzt ein Token mit Schreibrechten.</sub>
+
 ## Lizenz
 
 [PolyForm Noncommercial 1.0.0](LICENSE): Herunterladen und Nutzen für jeden nichtkommerziellen Zweck frei; kommerzielle Nutzung nur mit Erlaubnis des Autors.
